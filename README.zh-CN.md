@@ -35,7 +35,7 @@ ARINODE_PANEL_TOKEN='XBOARD_TOKEN' ./anctl init --panel https://panel.example.co
 
 ## 正式版与升级
 
-正式版版本号为 `YYYYMMDD-commit`，例如 `20261001-abcdef12`。日期采用发布提交的 UTC 日期，后缀为该提交的短 Git 哈希；自行构建且未注入版本号时显示 `dev`。维护者将代码提交到 `main` 后，在 GitHub Actions 手动运行 **Test and release AriNode**，测试通过才会发布正式版。发布包提供 Linux `amd64`、`arm64` 的 `arinode` 和 `anctl`。
+正式版版本号为 `YYYYMMDD-commit`，例如 `20261001-abcdef12`。日期采用发布提交的 UTC 日期，后缀为该提交的短 Git 哈希；自行构建且未注入版本号时显示 `dev`。维护者将代码提交到 `main` 后，可在 GitHub Actions 手动运行 **Test and release AriNode**，或为 `main` 上的提交推送符合规则的标签；测试通过才会发布正式版。发布包提供 Linux `amd64`、`arm64` 的 `arinode` 和 `anctl`。
 
 原生 Linux systemd 安装可用：
 
