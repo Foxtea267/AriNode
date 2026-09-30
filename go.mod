@@ -8,7 +8,7 @@ require (
 	github.com/apernet/hysteria/core/v2 v2.6.4
 	github.com/apernet/hysteria/extras/v2 v2.6.4
 	github.com/beevik/ntp v1.4.4-0.20240716062501-06ef196b89ec
-	github.com/fsnotify/fsnotify v1.9.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-acme/lego/v4 v4.25.2
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/juju/ratelimit v1.0.2
