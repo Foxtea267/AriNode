@@ -1,0 +1,71 @@
+name: Test and release AriNode
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test
+        run: GOEXPERIMENT=jsonv2 go test -p 2 ./...
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Compute YYYYMMDD-commit version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp=$(date -u -d "@$(git show -s --format=%ct HEAD)" +%Y%m%d)
+          short=$(git rev-parse --short=8 HEAD)
+          echo "value=${stamp}-${short}" >> "$GITHUB_OUTPUT"
+      - name: Build official Linux assets
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist-release
+          for arch in amd64 arm64; do
+            mkdir -p "build-$arch"
+            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 GOEXPERIMENT=jsonv2 go build -p 2 -trimpath -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' -ldflags "-s -w -X github.com/Foxtea267/ariNode/cmd.version=$VERSION" -o "build-$arch/arinode" .
+            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 GOEXPERIMENT=jsonv2 go build -p 2 -trimpath -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' -ldflags "-s -w -X github.com/Foxtea267/ariNode/cmd.version=$VERSION" -o "build-$arch/anctl" ./cmd/anctl
+            tar -C "build-$arch" -czf "dist-release/arinode-linux-$arch.tar.gz" arinode anctl
+          done
+          (cd dist-release && sha256sum *.tar.gz > SHA256SUMS)
+      - name: Publish stable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists"
+            exit 1
+          fi
+          gh release create "$VERSION" dist-release/*.tar.gz dist-release/SHA256SUMS --title "$VERSION" --target "$GITHUB_SHA" --generate-notes --latest

@@ -1,0 +1,15 @@
+[Unit]
+Description=AriNode node service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/arinode server --config /etc/arinode/config.json
+WorkingDirectory=/etc/arinode
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

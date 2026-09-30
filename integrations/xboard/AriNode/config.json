@@ -1,0 +1,9 @@
+{
+  "name": "AriNode 节点下发",
+  "code": "ari_node",
+  "version": "0.1.0",
+  "description": "为 AriNode 下发选定 Xboard 节点及服务器通信密钥",
+  "author": "AriNode",
+  "type": "feature",
+  "config": {}
+}

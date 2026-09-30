@@ -1,0 +1,9 @@
+.git
+.github
+reference-*
+upstream-v2bx
+data
+*.zip
+.tools
+config.json
+dist

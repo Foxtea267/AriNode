@@ -1,0 +1,17 @@
+{
+  "name": { "zh-CN": "AriNode 状态", "en-US": "AriNode status" },
+  "short": "arinode",
+  "version": "0.1.0",
+  "description": { "zh-CN": "在 Komari 中查看 AriNode 节点运行状态", "en-US": "Show AriNode node status in Komari" },
+  "author": "AriNode",
+  "entry": "script.js",
+  "permissions": { "allowRoutes": true, "timeout": 10 },
+  "pages": [{ "title": "AriNode", "type": "iframe", "file": "page.html", "visibility": "admin" }],
+  "configuration": {
+    "type": "managed",
+    "data": [
+      { "key": "status_url", "name": "AriNode status URL", "type": "string", "default": "http://127.0.0.1:18086/v1/status", "required": true },
+      { "key": "status_token", "name": "Status bearer token", "type": "string", "default": "" }
+    ]
+  }
+}

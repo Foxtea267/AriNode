@@ -1,0 +1,16 @@
+{
+  "Log": { "Level": "info" },
+  "Cores": [{ "Type": "sing" }],
+  "Panels": [
+    { "Name": "xboard-east", "ApiHost": "https://east.example.com", "ApiKey": "REPLACE_EAST_SERVER_TOKEN" },
+    { "Name": "xboard-west", "ApiHost": "https://west.example.com", "ApiKey": "REPLACE_WEST_MACHINE_TOKEN", "MachineID": 7 }
+  ],
+  "Nodes": [
+    { "Panel": "xboard-east", "Core": "sing", "NodeID": 1, "NodeType": "vless" },
+    { "Panel": "xboard-west", "Core": "sing", "NodeID": 2, "NodeType": "trojan" }
+  ],
+  "Komari": [
+    { "Name": "komari-a", "Endpoint": "https://monitor-a.example.com", "Token": "REPLACE_KOMARI_A_CLIENT_TOKEN", "Interval": 6 },
+    { "Name": "komari-b", "Endpoint": "https://monitor-b.example.com", "Token": "REPLACE_KOMARI_B_CLIENT_TOKEN", "Interval": 6 }
+  ]
+}

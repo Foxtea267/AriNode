@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>AriNode</title>
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 2rem; background: #0e1523; color: #e9edf5; }
+  main { max-width: 760px; margin: auto; }
+  h1 { font-size: 1.7rem; }
+  button { background: #4775ed; color: white; border: 0; border-radius: 8px; padding: .6rem 1rem; cursor: pointer; }
+  pre { background: #192336; padding: 1rem; border-radius: 10px; overflow: auto; line-height: 1.6; }
+</style>
+<main>
+  <h1>AriNode</h1>
+  <p>节点服务状态</p>
+  <button id="refresh">刷新</button>
+  <pre id="status">加载中…</pre>
+</main>
+<script>
+  async function refresh() {
+    const box = document.getElementById('status');
+    try {
+      const response = await fetch('/api/arinode/status', { credentials: 'same-origin' });
+      const data = await response.json();
+      box.textContent = JSON.stringify(data, null, 2);
+    } catch (error) {
+      box.textContent = String(error);
+    }
+  }
+  document.getElementById('refresh').onclick = refresh;
+  refresh();
+</script>
+</html>

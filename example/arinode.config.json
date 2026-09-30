@@ -1,0 +1,14 @@
+{
+  "Log": { "Level": "info" },
+  "Cores": [{ "Type": "sing" }],
+  "Nodes": [
+    {
+      "Core": "sing",
+      "ApiHost": "https://panel.example.com",
+      "ApiKey": "REPLACE_WITH_XBOARD_SERVER_TOKEN",
+      "NodeID": 1,
+      "NodeType": "vless",
+      "Timeout": 30
+    }
+  ]
+}
