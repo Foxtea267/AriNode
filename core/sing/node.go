@@ -118,6 +118,12 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 		Tag: tag,
 	}
 	switch info.Type {
+	case "mieru":
+		if info.Mieru == nil {
+			return option.Inbound{}, fmt.Errorf("missing mieru node settings")
+		}
+		in.Type = "mieru"
+		in.Options = &mieruInboundOptions{ListenOptions: listen, Transport: info.Mieru.Transport, TrafficPattern: info.Mieru.TrafficPattern}
 	case "vmess", "vless":
 		n := info.VAllss
 		t := option.V2RayTransportOptions{

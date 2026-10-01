@@ -29,6 +29,8 @@ func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
 		b.users.uidMap[p.Users[i].Uuid] = p.Users[i].Id
 	}
 	switch p.NodeInfo.Type {
+	case "mieru":
+		err = in.(*mieruInbound).AddUsers(p.Users)
 	case "vless":
 		us := make([]option.VLESSUser, len(p.Users))
 		for i := range p.Users {
@@ -179,6 +181,8 @@ func (b *Sing) DelUsers(users []panel.UserInfo, tag string, info *panel.NodeInfo
 	var del UserDeleter
 	if i, found := b.box.Inbound().Get(tag); found {
 		switch info.Type {
+		case "mieru":
+			del = i.(*mieruInbound)
 		case "vmess":
 			del = i.(*vmess.Inbound)
 		case "vless":

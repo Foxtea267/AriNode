@@ -606,7 +606,7 @@ func normalizeType(value string) (string, error) {
 	switch strings.ToLower(value) {
 	case "v2ray", "vmess":
 		return "vmess", nil
-	case "vless", "trojan", "shadowsocks", "hysteria", "hysteria2", "tuic", "anytls":
+	case "vless", "trojan", "shadowsocks", "hysteria", "hysteria2", "tuic", "anytls", "mieru":
 		return strings.ToLower(value), nil
 	default:
 		return "", fmt.Errorf("unsupported or missing node type %q", value)

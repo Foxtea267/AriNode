@@ -81,7 +81,7 @@ func writeInitialConfig(panel, token, core, output string, nodes []string, machi
 		}
 		typ := strings.ToLower(parts[0])
 		switch typ {
-		case "vmess", "vless", "trojan", "shadowsocks", "hysteria", "hysteria2", "tuic", "anytls":
+		case "vmess", "vless", "trojan", "shadowsocks", "hysteria", "hysteria2", "tuic", "anytls", "mieru":
 		default:
 			return fmt.Errorf("unsupported node type %q", typ)
 		}

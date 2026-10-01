@@ -33,6 +33,7 @@ type NodeInfo struct {
 	Trojan      *TrojanNode
 	Tuic        *TuicNode
 	AnyTls      *AnyTlsNode
+	Mieru       *MieruNode
 	Hysteria    *HysteriaNode
 	Hysteria2   *Hysteria2Node
 	Common      *CommonNode
@@ -120,6 +121,12 @@ type TuicNode struct {
 type AnyTlsNode struct {
 	CommonNode
 	PaddingScheme []string `json:"padding_scheme,omitempty"`
+}
+
+type MieruNode struct {
+	CommonNode
+	Transport      string `json:"transport"`
+	TrafficPattern string `json:"traffic_pattern"`
 }
 
 type HysteriaNode struct {
@@ -243,6 +250,21 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		cm = &rsp.CommonNode
 		node.AnyTls = rsp
 		node.Security = Tls
+	case "mieru":
+		rsp := &MieruNode{}
+		if err := json.Unmarshal(r.Body(), rsp); err != nil {
+			return nil, fmt.Errorf("decode mieru params: %w", err)
+		}
+		rsp.Transport = strings.ToLower(rsp.Transport)
+		if rsp.Transport == "" {
+			rsp.Transport = "tcp"
+		}
+		if rsp.Transport != "tcp" && rsp.Transport != "udp" {
+			return nil, fmt.Errorf("unsupported mieru transport %q", rsp.Transport)
+		}
+		cm = &rsp.CommonNode
+		node.Mieru = rsp
+		node.Security = None
 	case "hysteria":
 		rsp := &HysteriaNode{}
 		err = json.Unmarshal(r.Body(), rsp)

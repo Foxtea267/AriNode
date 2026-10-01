@@ -41,6 +41,8 @@ ARINODE_PANEL_TOKEN='XBOARD_TOKEN' ./anctl init --panel https://panel.example.co
 
 **客户端参数仍需正确**：AriNode 兼容面板空数组只作用于服务端，不能改写已经下发到客户端的订阅。若客户端报 `cannot unmarshal JSON array`，将对象字段的 `[]` 改为 `{}` 或删掉该空字段。没有独立下行服务器时删除 `extra.downloadSettings`；`address: null`、指向另一端口且 TLS/Reality 不一致的下行设置不能作为同节点的默认配置。可将[单节点 xhttp extra 示例](example/xhttp-extra.json)填入面板节点的 extra，保留节点自身的 host、path 和 Reality 参数，再更新客户端订阅。
 
+**Mieru**：节点填写 `NodeType: "mieru"`，使用 `sing` 内核或省略 `Core`。程序内置 [Mieru v3.29.0](https://github.com/enfein/mieru/tree/v3.29.0)，支持面板的 TCP/UDP 传输和 `traffic_pattern`；用户名和密码均为订阅用户 UUID，并接入 sing-box 路由、限额和流量上报。防火墙需放行节点对应的 TCP 或 UDP 端口。面板新增机器绑定后，还需将节点加入本机配置的 `Nodes` 并执行 `anctl restart`，目前不会自动发现新增绑定。原 xbnode 配置仍在时，也可用 `anctl migrate from-xbnode --force --switch` 重新读取当前机器绑定。Xboard 插件已支持生成 Mieru 节点配置。
+
 Xboard 的 `block` 规则支持普通域名及 `*.example.com`（匹配该域名及子域名）、IP/CIDR、`domain:`、`full:`、`keyword:`、`regexp:` 和 `protocol:`。普通域名按域名后缀处理；正则表达式须加 `regexp:` 前缀。规则更新先完整校验再替换，无效更新保留原有规则。旧版本如出现 `invalid domain rule` 且节点为 `retrying`、端口没有监听，请运行 `sudo anctl upgrade` 获取修复。
 
 多个节点可以分别绑定到不同的 Xboard 面板；参考 [多绑定配置示例](example/multi-bindings.config.json)。在 `Panels` 中为每个面板指定唯一 `Name`、`ApiHost` 和 `ApiKey`（也可使用 `ApiKeyEnv`）；`Nodes` 中通过 `Panel` 引用。机器 token 可在对应面板项中填写 `MachineID`。不同 Xboard 即使使用相同机器 ID，也会分别上报机器状态。

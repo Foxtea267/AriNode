@@ -13,6 +13,7 @@ import (
 	vCore "github.com/Foxtea267/AriNode/core"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/adapter/inbound"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
@@ -45,7 +46,9 @@ func init() {
 
 func New(c *conf.CoreConfig) (vCore.Core, error) {
 	ctx := context.Background()
-	ctx = box.Context(ctx, include.InboundRegistry(), include.OutboundRegistry(), include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
+	registry := include.InboundRegistry()
+	inbound.Register[mieruInboundOptions](registry, "mieru", newMieruInbound)
+	ctx = box.Context(ctx, registry, include.OutboundRegistry(), include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
 	options := option.Options{}
 	if len(c.SingConfig.OriginalPath) != 0 {
 		data, err := os.ReadFile(c.SingConfig.OriginalPath)
@@ -114,6 +117,7 @@ func (b *Sing) Protocols() []string {
 		"anytls",
 		"hysteria",
 		"hysteria2",
+		"mieru",
 	}
 }
 
