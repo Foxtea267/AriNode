@@ -6,15 +6,15 @@ This repository starts from [V2bX](https://github.com/wyx2685/V2bX) commit `7127
 
 ## One-command install (Linux)
 
-Create and enable your Xboard nodes first. On a Linux host with systemd, run:
+On a Linux host with systemd, run:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Foxtea267/ariNode/main/scripts/install.sh | sudo bash
 ```
 
-The installer prompts for the Xboard URL, token (hidden input), nodes such as `vless:1 trojan:2`, and an optional machine ID. It downloads the latest stable archive, verifies SHA256, installs `arinode` and `anctl`, creates `/etc/arinode/config.json` with mode `0600`, and starts `arinode.service`. It preserves an existing config and uses the upgrade path on repeated runs. Linux `amd64` or `arm64`, `curl`, `tar`, `sha256sum`, and `systemctl` are required. Automatic upgrades stay off until explicitly enabled. See [the script](scripts/install.sh) before running it.
+The installer downloads and verifies the latest stable release, then asks for Chinese or English and a deployment mode: fresh setup, migration from an existing xbnode, or keeping an AriNode config. If `/etc/xboard-node/config.yml` exists, migration is the default. Migration reads that config and its `credentials.env` without asking for the Xboard URL or token, backs up any existing AriNode config, and switches systemd services with a restart attempt for xbnode if AriNode fails to start. Fresh setup asks for the Xboard URL, token (hidden input), nodes such as `vless:1 trojan:2`, and optional machine ID. The config is mode `0600`. Automatic upgrades stay off until explicitly enabled. Linux `amd64` or `arm64`, `curl`, `tar`, `sha256sum`, and `systemctl` are required.
 
-After installation, use `anctl status` and `anctl log`. For multiple Xboard or Komari panels, edit the [multi-binding config](example/multi-bindings.config.json) and run `sudo anctl restart`.
+Run `sudo anctl bash` to reopen the language and deployment menu. Use `anctl status` and `anctl log` to check the service. For multiple Xboard or Komari panels, edit the [multi-binding config](example/multi-bindings.config.json) and run `sudo anctl restart`.
 
 ## Quick start
 
@@ -62,7 +62,7 @@ sudo anctl migrate from-xbnode --switch
 sudo anctl migrate to-xbnode --switch
 ```
 
-The defaults are `/etc/xboard-node/config.yml` and `/etc/arinode/config.json`. Add `--force` if the destination exists; its previous contents are backed up to a timestamped `.bak-*` file. Use `--dry-run` to inspect the node count and warnings without writing a file or printing credentials. Omit `--switch` to convert only the config, or provide `--input` and `--output` for custom paths.
+The defaults are `/etc/xboard-node/config.yml` and `/etc/arinode/config.json`. Import also reads `credentials.env` beside the xbnode config as literal key and value assignments to resolve token environment variables. Add `--force` if the destination exists; its previous contents are backed up to a timestamped `.bak-*` file. Use `--dry-run` to inspect the node count and warnings without writing a file or printing credentials. Omit `--switch` to convert only the config, or provide `--input` and `--output` for custom paths.
 
 Import automatically queries Xboard for node types absent from the YAML and discovers current machine bindings. Offline single-node import can use `--offline --node-type vless`; machine import requires panel access. Exported machine bindings use Xboard-Node's dynamic discovery, which may include additional nodes bound to that machine. Some kernel customization, WebSocket, polling and runtime settings need manual review. Certificate paths are preserved, but certificate files are not copied. If the new systemd service fails to start, the command attempts to restart the previous service.
 

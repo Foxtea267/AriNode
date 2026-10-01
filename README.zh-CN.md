@@ -4,15 +4,15 @@ AriNode 基于 V2bX 二次开发，保留 sing-box、Xray、Hysteria2 内核，�
 
 ## 一键安装（Linux）
 
-先在 Xboard 创建并启用节点，准备面板地址、服务器密钥及节点类型和 ID，然后在使用 systemd 的 Linux 宿主机执行：
+在使用 systemd 的 Linux 宿主机执行：
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Foxtea267/ariNode/main/scripts/install.sh | sudo bash
 ```
 
-脚本会询问这些信息（密钥输入不回显），下载最新正式版，核对 SHA256，安装 `arinode` 和 `anctl`，生成权限为 `0600` 的 `/etc/arinode/config.json`，并启用、启动 `arinode.service`。节点可输入 `vless:1 trojan:2` 等多个绑定；使用机器密钥时填写机器 ID。再次运行会保留现有配置，并走正式版升级流程。脚本需要 `curl`、`tar`、`sha256sum`、`systemctl` 和 Linux `amd64` 或 `arm64`。自动升级依然默认关闭。
+脚本下载最新正式版、核对 SHA256 并安装程序，然后**先选择中文或英文，再选择部署方式**：从零部署、从已有 xbnode 迁移，或保留现有 AriNode 配置。检测到 `/etc/xboard-node/config.yml` 时默认选择迁移；迁移直接读取 xbnode 配置及同目录的 `credentials.env`，无需重新填写 Xboard URL、密钥和节点。已有 AriNode 配置会备份为 `.bak-时间戳`，切换服务失败时会尝试恢复 xbnode。选择从零部署时才会询问面板地址、密钥（输入不回显）和节点，例如 `vless:1 trojan:2`。配置文件权限为 `0600`，自动升级默认关闭。脚本需要 `curl`、`tar`、`sha256sum`、`systemctl` 和 Linux `amd64` 或 `arm64`。
 
-安装后用 `anctl status`、`anctl log` 查看状态。多 Xboard、Komari 面板可参考[多绑定配置](example/multi-bindings.config.json)编辑配置后执行 `sudo anctl restart`。
+安装后可运行 `sudo anctl bash` 重新进入语言与部署菜单；`anctl status`、`anctl log` 可查看状态。多 Xboard、Komari 面板可参考[多绑定配置](example/multi-bindings.config.json)编辑配置后执行 `sudo anctl restart`。
 
 ## 快速部署
 
@@ -71,7 +71,7 @@ sudo anctl migrate from-xbnode --switch
 sudo anctl migrate to-xbnode --switch
 ```
 
-两条命令默认分别使用 `/etc/xboard-node/config.yml` 和 `/etc/arinode/config.json`。目标文件已存在时先加 `--force`；命令会以 `.bak-时间戳` 保存旧配置。可先用 `--dry-run` 查看节点数量及迁移警告，不会输出密钥或写入文件。只转换配置而不切换服务时省略 `--switch`；自定义路径使用 `--input`、`--output`。
+两条命令默认分别使用 `/etc/xboard-node/config.yml` 和 `/etc/arinode/config.json`。迁入时也会读取 xbnode 配置同目录的 `credentials.env`，解析其中的密钥变量，不执行文件中的命令。目标文件已存在时先加 `--force`；命令会以 `.bak-时间戳` 保存旧配置。可先用 `--dry-run` 查看节点数量及迁移警告，不会输出密钥或写入文件。只转换配置而不切换服务时省略 `--switch`；自定义路径使用 `--input`、`--output`。
 
 迁入时会自动从面板查询没有写 `node_type` 的单节点配置，并从机器接口获取当前绑定节点。离线迁入可用 `--offline --node-type vless`，机器模式需要在线发现。迁出机器模式时 Xboard-Node 恢复为动态发现，因此会管理面板上该机器的全部节点。Xboard-Node 的 WebSocket、轮询与 Go 运行时设置，以及两端的部分内核自定义配置无法等价转换；命令会警告或拒绝这些场景。证书文件路径不会复制证书文件，请确认目标服务可读取原路径。`--switch` 要求目标 systemd 单元已经安装，启动失败时尝试重新启动原服务。
 

@@ -48,39 +48,8 @@ release_version=${BASH_REMATCH[1]}
 printf 'Installing AriNode %s for linux/%s\n' "$release_version" "$arch"
 
 if [[ -L $config_path ]]; then fail "refusing symlinked config: $config_path"; fi
-if [[ ! -e $config_path ]]; then
-  if [[ -z ${ARINODE_PANEL_URL:-} ]]; then
-    [[ -r /dev/tty ]] || fail 'set ARINODE_PANEL_URL, ARINODE_PANEL_TOKEN and ARINODE_NODES for non-interactive installation'
-    read -r -p 'Xboard panel URL: ' ARINODE_PANEL_URL </dev/tty
-  fi
-  if [[ -z ${ARINODE_PANEL_TOKEN:-} ]]; then
-    [[ -r /dev/tty ]] || fail 'set ARINODE_PANEL_TOKEN for non-interactive installation'
-    read -r -s -p 'Xboard server or machine token: ' ARINODE_PANEL_TOKEN </dev/tty
-    printf '\n' >/dev/tty
-  fi
-  if [[ -z ${ARINODE_NODES:-} ]]; then
-    [[ -r /dev/tty ]] || fail 'set ARINODE_NODES, for example "vless:1 trojan:2"'
-    read -r -p 'Nodes (space separated, e.g. vless:1 trojan:2): ' ARINODE_NODES </dev/tty
-  fi
-  if [[ -z ${ARINODE_MACHINE_ID:-} && -r /dev/tty ]]; then
-    read -r -p 'Xboard machine ID (Enter for server token): ' ARINODE_MACHINE_ID </dev/tty
-  fi
-  read -r -a nodes <<< "${ARINODE_NODES:-}"
-  [[ ${#nodes[@]} -gt 0 ]] || fail 'at least one node is required'
-  init_args=(init --panel "$ARINODE_PANEL_URL" --core "${ARINODE_CORE:-sing}" --output "${staging}/config.json")
-  for node in "${nodes[@]}"; do init_args+=(--node "$node"); done
-  if [[ -n ${ARINODE_MACHINE_ID:-} ]]; then init_args+=(--machine-id "$ARINODE_MACHINE_ID"); fi
-  ARINODE_PANEL_TOKEN="$ARINODE_PANEL_TOKEN" "${staging}/anctl" "${init_args[@]}"
-  unset ARINODE_PANEL_TOKEN
-fi
-
 install -d -m 755 /usr/local/bin
 install -d -m 700 /etc/arinode
-if [[ -f "${staging}/config.json" ]]; then
-  install -m 600 "${staging}/config.json" "$config_path"
-else
-  printf 'Keeping existing %s\n' "$config_path"
-fi
 
 # Existing installations use the updater's rollback path rather than
 # replacing executables while a node service may be running.
@@ -111,8 +80,15 @@ WantedBy=multi-user.target
 UNIT
 fi
 systemctl daemon-reload
-systemctl enable arinode.service
-systemctl restart arinode.service
+if [[ -r /dev/tty ]]; then
+  /usr/local/bin/anctl bash </dev/tty
+else
+  if [[ -z ${ARINODE_INSTALL_MODE:-} && -f $config_path ]]; then
+    export ARINODE_INSTALL_MODE=keep
+  fi
+  export ARINODE_LANGUAGE="${ARINODE_LANGUAGE:-en}"
+  /usr/local/bin/anctl bash
+fi
 systemctl is-active --quiet arinode.service || fail 'service did not start; inspect journalctl -u arinode -e'
 printf 'AriNode installed. Check: anctl status, anctl log, curl http://127.0.0.1:18086/v1/status\n'
 printf 'The installer does not enable automatic upgrades. To opt in: sudo anctl upgrade auto enable\n'
