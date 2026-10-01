@@ -39,6 +39,8 @@ ARINODE_PANEL_TOKEN='XBOARD_TOKEN' ./anctl init --panel https://panel.example.co
 
 **xhttp / splithttp 例外**：当前内置的 sing-box 不支持这两种传输。没有指定 `CoreName` 的 sing-box 节点收到此配置时，会自动使用内置 Xray；优先复用已配置的 Xray，否则按需启动默认 Xray，不需要另装程序。普通 TCP 等传输仍使用 sing-box，面板切回普通传输后也会恢复原内核选择。显式指定 sing-box `CoreName` 的节点会提示选择 Xray。Xboard xhttp `extra` 中 PHP 生成的空对象数组也会自动兼容。若日志出现 `unknown transport type: xhttp`，运行 `sudo anctl upgrade`。
 
+**客户端参数仍需正确**：AriNode 兼容面板空数组只作用于服务端，不能改写已经下发到客户端的订阅。若客户端报 `cannot unmarshal JSON array`，将对象字段的 `[]` 改为 `{}` 或删掉该空字段。没有独立下行服务器时删除 `extra.downloadSettings`；`address: null`、指向另一端口且 TLS/Reality 不一致的下行设置不能作为同节点的默认配置。可将[单节点 xhttp extra 示例](example/xhttp-extra.json)填入面板节点的 extra，保留节点自身的 host、path 和 Reality 参数，再更新客户端订阅。
+
 Xboard 的 `block` 规则支持普通域名及 `*.example.com`（匹配该域名及子域名）、IP/CIDR、`domain:`、`full:`、`keyword:`、`regexp:` 和 `protocol:`。普通域名按域名后缀处理；正则表达式须加 `regexp:` 前缀。规则更新先完整校验再替换，无效更新保留原有规则。旧版本如出现 `invalid domain rule` 且节点为 `retrying`、端口没有监听，请运行 `sudo anctl upgrade` 获取修复。
 
 多个节点可以分别绑定到不同的 Xboard 面板；参考 [多绑定配置示例](example/multi-bindings.config.json)。在 `Panels` 中为每个面板指定唯一 `Name`、`ApiHost` 和 `ApiKey`（也可使用 `ApiKeyEnv`）；`Nodes` 中通过 `Panel` 引用。机器 token 可在对应面板项中填写 `MachineID`。不同 Xboard 即使使用相同机器 ID，也会分别上报机器状态。
