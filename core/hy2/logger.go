@@ -5,8 +5,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/Foxtea267/ariNode/common/format"
-	"github.com/Foxtea267/ariNode/limiter"
+	"github.com/Foxtea267/AriNode/common/format"
+	"github.com/Foxtea267/AriNode/limiter"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

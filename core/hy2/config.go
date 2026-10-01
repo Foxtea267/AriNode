@@ -18,8 +18,8 @@ import (
 	"github.com/apernet/hysteria/extras/v2/outbounds"
 	"github.com/apernet/hysteria/extras/v2/sniff"
 	eUtils "github.com/apernet/hysteria/extras/v2/utils"
-	"github.com/Foxtea267/ariNode/api/panel"
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/conf"
 	"go.uber.org/zap"
 )
 

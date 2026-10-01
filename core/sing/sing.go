@@ -9,8 +9,8 @@ import (
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/log"
 
-	"github.com/Foxtea267/ariNode/conf"
-	vCore "github.com/Foxtea267/ariNode/core"
+	"github.com/Foxtea267/AriNode/conf"
+	vCore "github.com/Foxtea267/AriNode/core"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/option"

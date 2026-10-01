@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/Foxtea267/ariNode/api/panel"
+	"github.com/Foxtea267/AriNode/api/panel"
 )
 
 func (l *Limiter) CheckDomainRule(destination string) (reject bool) {

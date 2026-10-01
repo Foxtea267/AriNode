@@ -5,7 +5,7 @@ import (
 
 	"encoding/json"
 
-	conf2 "github.com/Foxtea267/ariNode/conf"
+	conf2 "github.com/Foxtea267/AriNode/conf"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
 )

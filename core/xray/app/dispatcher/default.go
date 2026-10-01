@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Foxtea267/ariNode/common/counter"
-	"github.com/Foxtea267/ariNode/common/rate"
-	"github.com/Foxtea267/ariNode/limiter"
+	"github.com/Foxtea267/AriNode/common/counter"
+	"github.com/Foxtea267/AriNode/common/rate"
+	"github.com/Foxtea267/AriNode/limiter"
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/common"

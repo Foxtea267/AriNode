@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Foxtea267/ariNode/api/panel"
-	"github.com/Foxtea267/ariNode/conf"
-	vCore "github.com/Foxtea267/ariNode/core"
-	"github.com/Foxtea267/ariNode/limiter"
+	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/conf"
+	vCore "github.com/Foxtea267/AriNode/core"
+	"github.com/Foxtea267/AriNode/limiter"
 )
 
 type fakeCore struct {

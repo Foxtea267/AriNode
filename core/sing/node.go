@@ -12,8 +12,8 @@ import (
 
 	"encoding/json"
 
-	"github.com/Foxtea267/ariNode/api/panel"
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/conf"
 	"github.com/sagernet/sing-box/option"
 	F "github.com/sagernet/sing/common/format"
 	"github.com/sagernet/sing/common/json/badoption"

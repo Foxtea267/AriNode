@@ -9,7 +9,7 @@ import (
 
 	"encoding/json"
 
-	"github.com/Foxtea267/ariNode/api/panel"
+	"github.com/Foxtea267/AriNode/api/panel"
 	log "github.com/sirupsen/logrus"
 	coreConf "github.com/xtls/xray-core/infra/conf"
 )

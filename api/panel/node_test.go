@@ -4,7 +4,7 @@ import (
 	"log"
 	"testing"
 
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/conf"
 )
 
 var client *Client

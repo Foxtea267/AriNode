@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/conf"
 	"github.com/sagernet/sing-box/option"
 )
 

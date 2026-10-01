@@ -3,8 +3,8 @@ package node
 import (
 	"strconv"
 
-	"github.com/Foxtea267/ariNode/api/panel"
-	"github.com/Foxtea267/ariNode/common/sysstatus"
+	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/common/sysstatus"
 	log "github.com/sirupsen/logrus"
 )
 

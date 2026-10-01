@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/conf"
 )
 
 func TestEmptyUserListDiffersFromNotModified(t *testing.T) {

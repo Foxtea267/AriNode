@@ -4,9 +4,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/Foxtea267/ariNode/api/panel"
-	"github.com/Foxtea267/ariNode/common/counter"
-	vCore "github.com/Foxtea267/ariNode/core"
+	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/common/counter"
+	vCore "github.com/Foxtea267/AriNode/core"
 	"github.com/apernet/hysteria/core/v2/server"
 )
 

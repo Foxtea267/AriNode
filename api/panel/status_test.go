@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Foxtea267/ariNode/common/sysstatus"
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/common/sysstatus"
+	"github.com/Foxtea267/AriNode/conf"
 )
 
 func TestReportStatusUsesUniProxyContract(t *testing.T) {

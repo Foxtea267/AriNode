@@ -2,4 +2,4 @@
 
 package imports
 
-import _ "github.com/Foxtea267/ariNode/core/hy2"
+import _ "github.com/Foxtea267/AriNode/core/hy2"

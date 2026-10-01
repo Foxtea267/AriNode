@@ -6,12 +6,12 @@ import (
 	"net"
 	"sync"
 
-	"github.com/Foxtea267/ariNode/common/format"
-	"github.com/Foxtea267/ariNode/common/rate"
+	"github.com/Foxtea267/AriNode/common/format"
+	"github.com/Foxtea267/AriNode/common/rate"
 
-	"github.com/Foxtea267/ariNode/limiter"
+	"github.com/Foxtea267/AriNode/limiter"
 
-	"github.com/Foxtea267/ariNode/common/counter"
+	"github.com/Foxtea267/AriNode/common/counter"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/log"
 	N "github.com/sagernet/sing/common/network"

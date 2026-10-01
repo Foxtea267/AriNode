@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/Foxtea267/ariNode/common/file"
+	"github.com/Foxtea267/AriNode/common/file"
 	log "github.com/sirupsen/logrus"
 )
 

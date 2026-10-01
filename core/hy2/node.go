@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/apernet/hysteria/core/v2/server"
-	"github.com/Foxtea267/ariNode/api/panel"
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/conf"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )

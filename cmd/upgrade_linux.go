@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Foxtea267/ariNode/upgrade"
+	"github.com/Foxtea267/AriNode/upgrade"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
 )

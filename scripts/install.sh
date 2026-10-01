@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo='Foxtea267/ariNode'
+repo='Foxtea267/AriNode'
 release_base="https://github.com/${repo}/releases/latest/download"
 config_path='/etc/arinode/config.json'
 service_path='/etc/systemd/system/arinode.service'
@@ -11,7 +11,7 @@ need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
 [[ $(id -u) -eq 0 ]] || fail 'run as root (curl ... | sudo bash)'
 [[ $(uname -s) == Linux ]] || fail 'Linux is required'
-for command in curl tar sha256sum install systemctl awk mktemp; do need "$command"; done
+for command in curl tar sha256sum install systemctl awk mktemp cp mv rm; do need "$command"; done
 
 case "$(uname -m)" in
   x86_64|amd64) arch='amd64' ;;
@@ -21,7 +21,7 @@ esac
 
 asset="arinode-linux-${arch}.tar.gz"
 staging=$(mktemp -d)
-trap 'rm -rf -- "$staging"' EXIT
+trap 'rm -rf -- "$staging"; rm -f -- "/usr/local/bin/.arinode.new.$$" "/usr/local/bin/.anctl.new.$$"' EXIT
 
 curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
   "${release_base}/SHA256SUMS" -o "${staging}/SHA256SUMS"
@@ -51,14 +51,29 @@ if [[ -L $config_path ]]; then fail "refusing symlinked config: $config_path"; f
 install -d -m 755 /usr/local/bin
 install -d -m 700 /etc/arinode
 
-# Existing installations use the updater's rollback path rather than
-# replacing executables while a node service may be running.
-if [[ -x /usr/local/bin/arinode && -x /usr/local/bin/anctl && -e $service_path ]]; then
-  /usr/local/bin/anctl upgrade
-else
-  install -m 755 "${staging}/arinode" /usr/local/bin/arinode
-  install -m 755 "${staging}/anctl" /usr/local/bin/anctl
-fi
+# The archive was verified above. Stage replacements on the target filesystem
+# so a running service can keep its old inode until the setup menu restarts it.
+for binary in arinode anctl; do
+  if [[ -f /usr/local/bin/${binary} ]]; then
+    cp -p "/usr/local/bin/${binary}" "${staging}/previous-${binary}"
+  fi
+  install -m 755 "${staging}/${binary}" "/usr/local/bin/.${binary}.new.$$"
+done
+replaced=()
+for binary in arinode anctl; do
+  if ! mv -f "/usr/local/bin/.${binary}.new.$$" "/usr/local/bin/${binary}"; then
+    for previous in "${replaced[@]}"; do
+      if [[ -f ${staging}/previous-${previous} ]]; then
+        install -m 755 "${staging}/previous-${previous}" "/usr/local/bin/.${previous}.restore.$$"
+        mv -f "/usr/local/bin/.${previous}.restore.$$" "/usr/local/bin/${previous}"
+      else
+        rm -f -- "/usr/local/bin/${previous}"
+      fi
+    done
+    fail "could not replace ${binary}"
+  fi
+  replaced+=("$binary")
+done
 
 if [[ ! -e $service_path ]]; then
   cat > "$service_path" <<'UNIT'

@@ -20,8 +20,8 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns"
 	"github.com/go-acme/lego/v4/registration"
 
-	"github.com/Foxtea267/ariNode/common/file"
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/common/file"
+	"github.com/Foxtea267/AriNode/conf"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/lego"
 )

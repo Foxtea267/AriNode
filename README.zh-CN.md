@@ -1,13 +1,13 @@
 # AriNode
 
-AriNode 基于 V2bX 二次开发，保留 sing-box、Xray、Hysteria2 内核，并增加 Xboard 原生节点与机器认证、Komari 状态页面，以及 Linux TCP 调优入口。项目仓库为 [Foxtea267/ariNode](https://github.com/Foxtea267/ariNode)，上游来源与兼容边界见 [README.md](README.md)。
+AriNode 基于 V2bX 二次开发，保留 sing-box、Xray、Hysteria2 内核，并增加 Xboard 原生节点与机器认证、Komari 状态页面，以及 Linux TCP 调优入口。项目仓库为 [Foxtea267/AriNode](https://github.com/Foxtea267/AriNode)，上游来源与兼容边界见 [README.md](README.md)。
 
 ## 一键安装（Linux）
 
 在使用 systemd 的 Linux 宿主机执行：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Foxtea267/ariNode/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/install.sh | sudo bash
 ```
 
 脚本下载最新正式版、核对 SHA256 并安装程序，然后**先选择中文或英文，再选择部署方式**：从零部署、从已有 xbnode 迁移，或保留现有 AriNode 配置。检测到 `/etc/xboard-node/config.yml` 时默认选择迁移；迁移直接读取 xbnode 配置及同目录的 `credentials.env`，无需重新填写 Xboard URL、密钥和节点。已有 AriNode 配置会备份为 `.bak-时间戳`，切换服务失败时会尝试恢复 xbnode。选择从零部署时才会询问面板地址、密钥（输入不回显）和节点，例如 `vless:1 trojan:2`。配置文件权限为 `0600`，自动升级默认关闭。脚本需要 `curl`、`tar`、`sha256sum`、`systemctl` 和 Linux `amd64` 或 `arm64`。

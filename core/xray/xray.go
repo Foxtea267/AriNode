@@ -7,10 +7,10 @@ import (
 
 	"encoding/json/v2"
 
-	"github.com/Foxtea267/ariNode/conf"
-	vCore "github.com/Foxtea267/ariNode/core"
-	"github.com/Foxtea267/ariNode/core/xray/app/dispatcher"
-	_ "github.com/Foxtea267/ariNode/core/xray/distro/all"
+	"github.com/Foxtea267/AriNode/conf"
+	vCore "github.com/Foxtea267/AriNode/core"
+	"github.com/Foxtea267/AriNode/core/xray/app/dispatcher"
+	_ "github.com/Foxtea267/AriNode/core/xray/distro/all"
 	log "github.com/sirupsen/logrus"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/stats"

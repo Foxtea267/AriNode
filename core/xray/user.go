@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Foxtea267/ariNode/api/panel"
-	"github.com/Foxtea267/ariNode/common/counter"
-	"github.com/Foxtea267/ariNode/common/format"
-	vCore "github.com/Foxtea267/ariNode/core"
-	"github.com/Foxtea267/ariNode/core/xray/app/dispatcher"
+	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/common/counter"
+	"github.com/Foxtea267/AriNode/common/format"
+	vCore "github.com/Foxtea267/AriNode/core"
+	"github.com/Foxtea267/AriNode/core/xray/app/dispatcher"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy"
 )

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Foxtea267/ariNode/common/json5"
+	"github.com/Foxtea267/AriNode/common/json5"
 	"gopkg.in/yaml.v3"
 )
 

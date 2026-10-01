@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Foxtea267/ariNode/common/json5"
+	"github.com/Foxtea267/AriNode/common/json5"
 
 	"encoding/json/v2"
 )

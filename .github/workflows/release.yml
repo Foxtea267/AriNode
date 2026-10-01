@@ -62,8 +62,8 @@ jobs:
           mkdir -p dist-release
           for arch in amd64 arm64; do
             mkdir -p "build-$arch"
-            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 GOEXPERIMENT=jsonv2 go build -p 2 -trimpath -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' -ldflags "-s -w -X github.com/Foxtea267/ariNode/cmd.version=$VERSION" -o "build-$arch/arinode" .
-            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 GOEXPERIMENT=jsonv2 go build -p 2 -trimpath -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' -ldflags "-s -w -X github.com/Foxtea267/ariNode/cmd.version=$VERSION" -o "build-$arch/anctl" ./cmd/anctl
+            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 GOEXPERIMENT=jsonv2 go build -p 2 -trimpath -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' -ldflags "-s -w -X github.com/Foxtea267/AriNode/cmd.version=$VERSION" -o "build-$arch/arinode" .
+            GOOS=linux GOARCH="$arch" CGO_ENABLED=0 GOEXPERIMENT=jsonv2 go build -p 2 -trimpath -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' -ldflags "-s -w -X github.com/Foxtea267/AriNode/cmd.version=$VERSION" -o "build-$arch/anctl" ./cmd/anctl
             tar -C "build-$arch" -czf "dist-release/arinode-linux-$arch.tar.gz" arinode anctl
           done
           (cd dist-release && sha256sum *.tar.gz > SHA256SUMS)

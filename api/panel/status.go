@@ -1,6 +1,6 @@
 package panel
 
-import "github.com/Foxtea267/ariNode/common/sysstatus"
+import "github.com/Foxtea267/AriNode/common/sysstatus"
 
 func (c *Client) ReportStatus(status sysstatus.Status) error {
 	path := c.endpoint("status")

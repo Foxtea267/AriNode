@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/conf"
 )
 
 var l *Lego

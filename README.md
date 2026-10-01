@@ -9,7 +9,7 @@ This repository starts from [V2bX](https://github.com/wyx2685/V2bX) commit `7127
 On a Linux host with systemd, run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Foxtea267/ariNode/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/install.sh | sudo bash
 ```
 
 The installer downloads and verifies the latest stable release, then asks for Chinese or English and a deployment mode: fresh setup, migration from an existing xbnode, or keeping an AriNode config. If `/etc/xboard-node/config.yml` exists, migration is the default. Migration reads that config and its `credentials.env` without asking for the Xboard URL or token, backs up any existing AriNode config, and switches systemd services with a restart attempt for xbnode if AriNode fails to start. Fresh setup asks for the Xboard URL, token (hidden input), nodes such as `vless:1 trojan:2`, and optional machine ID. The config is mode `0600`. Automatic upgrades stay off until explicitly enabled. Linux `amd64` or `arm64`, `curl`, `tar`, `sha256sum`, and `systemctl` are required.

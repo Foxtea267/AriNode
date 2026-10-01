@@ -1,8 +1,8 @@
 package core
 
 import (
-	"github.com/Foxtea267/ariNode/api/panel"
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/conf"
 )
 
 type AddUsersParams struct {

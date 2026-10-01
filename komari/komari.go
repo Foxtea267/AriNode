@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Foxtea267/ariNode/common/sysstatus"
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/common/sysstatus"
+	"github.com/Foxtea267/AriNode/conf"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const LatestReleaseURL = "https://api.github.com/repos/Foxtea267/ariNode/releases/latest"
+const LatestReleaseURL = "https://api.github.com/repos/Foxtea267/AriNode/releases/latest"
 
 var versionPattern = regexp.MustCompile(`^[0-9]{8}-[0-9a-f]{8,12}$`)
 
@@ -108,7 +108,7 @@ func (c Client) Latest(ctx context.Context, arch string) (Release, Asset, error)
 		if asset.Size <= 0 || asset.Size > maxArchiveBytes {
 			return Release{}, Asset{}, fmt.Errorf("release asset size is invalid")
 		}
-		if !strings.HasPrefix(asset.URL, "https://github.com/Foxtea267/ariNode/releases/download/"+release.Tag+"/") {
+		if !strings.HasPrefix(asset.URL, "https://github.com/Foxtea267/AriNode/releases/download/"+release.Tag+"/") {
 			return Release{}, Asset{}, fmt.Errorf("release asset URL is unexpected")
 		}
 		if !validDigest(asset.Digest) {

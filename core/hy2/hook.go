@@ -3,9 +3,9 @@ package hy2
 import (
 	"sync"
 
-	"github.com/Foxtea267/ariNode/common/counter"
-	"github.com/Foxtea267/ariNode/common/format"
-	"github.com/Foxtea267/ariNode/limiter"
+	"github.com/Foxtea267/AriNode/common/counter"
+	"github.com/Foxtea267/AriNode/common/format"
+	"github.com/Foxtea267/AriNode/limiter"
 	"github.com/apernet/hysteria/core/v2/server"
 	"go.uber.org/zap"
 )

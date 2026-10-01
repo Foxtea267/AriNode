@@ -1,4 +1,4 @@
-module github.com/Foxtea267/ariNode
+module github.com/Foxtea267/AriNode
 
 go 1.25
 

@@ -1,8 +1,8 @@
 package hy2
 
 import (
-	"github.com/Foxtea267/ariNode/conf"
-	vCore "github.com/Foxtea267/ariNode/core"
+	"github.com/Foxtea267/AriNode/conf"
+	vCore "github.com/Foxtea267/AriNode/core"
 	"go.uber.org/zap"
 )
 

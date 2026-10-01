@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/Foxtea267/ariNode/common/systime"
+	"github.com/Foxtea267/AriNode/common/systime"
 	"github.com/beevik/ntp"
 	"github.com/spf13/cobra"
 )

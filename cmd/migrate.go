@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Foxtea267/ariNode/migrate"
+	"github.com/Foxtea267/AriNode/migrate"
 	"github.com/spf13/cobra"
 )
 

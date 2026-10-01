@@ -19,7 +19,7 @@ import (
 func TestStableReleaseValidation(t *testing.T) {
 	const tag = "20261001-abcdef12"
 	const name = "arinode-linux-amd64.tar.gz"
-	valid := Release{Tag: tag, Assets: []Asset{{Name: name, URL: "https://github.com/Foxtea267/ariNode/releases/download/" + tag + "/" + name, Digest: "sha256:" + fmt.Sprintf("%064x", 1), Size: 12}}}
+	valid := Release{Tag: tag, Assets: []Asset{{Name: name, URL: "https://github.com/Foxtea267/AriNode/releases/download/" + tag + "/" + name, Digest: "sha256:" + fmt.Sprintf("%064x", 1), Size: 12}}}
 	for _, tc := range []struct {
 		name    string
 		mutate  func(*Release)

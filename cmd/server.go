@@ -14,11 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Foxtea267/ariNode/conf"
-	vCore "github.com/Foxtea267/ariNode/core"
-	"github.com/Foxtea267/ariNode/komari"
-	"github.com/Foxtea267/ariNode/limiter"
-	"github.com/Foxtea267/ariNode/node"
+	"github.com/Foxtea267/AriNode/conf"
+	vCore "github.com/Foxtea267/AriNode/core"
+	"github.com/Foxtea267/AriNode/komari"
+	"github.com/Foxtea267/AriNode/limiter"
+	"github.com/Foxtea267/AriNode/node"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

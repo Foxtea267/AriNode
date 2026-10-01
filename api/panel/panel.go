@@ -10,7 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/Foxtea267/ariNode/conf"
+	"github.com/Foxtea267/AriNode/conf"
 	"github.com/go-resty/resty/v2"
 )
 

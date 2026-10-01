@@ -5,7 +5,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	_ "github.com/Foxtea267/ariNode/core/imports"
+	_ "github.com/Foxtea267/AriNode/core/imports"
 	"github.com/spf13/cobra"
 )
 
