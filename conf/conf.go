@@ -63,10 +63,40 @@ func (p *Conf) LoadFromPath(filePath string) error {
 	if err != nil {
 		return fmt.Errorf("unmarshal config error: %s", err)
 	}
+	if err := p.resolveCores(); err != nil {
+		return err
+	}
 	if err := p.resolvePanels(); err != nil {
 		return err
 	}
 	return p.resolveKomari()
+}
+
+func (p *Conf) resolveCores() error {
+	if len(p.CoresConfig) == 0 {
+		p.CoresConfig = []CoreConfig{DefaultCoreConfig()}
+	}
+	hasSing := false
+	for _, c := range p.CoresConfig {
+		hasSing = hasSing || c.Type == "sing"
+	}
+	for i := range p.NodeConfig {
+		o := &p.NodeConfig[i].Options
+		if o.CoreName != "" {
+			for _, c := range p.CoresConfig {
+				if c.Name == o.CoreName && o.Core == "" {
+					if err := o.UseCore(c.Type); err != nil {
+						return fmt.Errorf("Nodes[%d]: %w", i, err)
+					}
+					break
+				}
+			}
+		} else if o.Core == "sing" && !hasSing {
+			p.CoresConfig = append(p.CoresConfig, DefaultCoreConfig())
+			hasSing = true
+		}
+	}
+	return nil
 }
 
 func (p *Conf) resolveKomari() error {

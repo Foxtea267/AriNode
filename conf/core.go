@@ -2,7 +2,26 @@ package conf
 
 import (
 	"encoding/json"
+	"strings"
 )
+
+func NormalizeCoreType(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "", "sing", "singbox", "sing-box":
+		return "sing"
+	case "xray":
+		return "xray"
+	case "hysteria2":
+		return "hysteria2"
+	default:
+		return value
+	}
+}
+
+func DefaultCoreConfig() CoreConfig {
+	return CoreConfig{Type: "sing", SingConfig: NewSingConfig()}
+}
 
 type CoreConfig struct {
 	Type            string           `json:"Type"`
@@ -19,6 +38,7 @@ func (c *CoreConfig) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
+	c.Type = NormalizeCoreType(c.Type)
 	switch c.Type {
 	case "xray":
 		c.XrayConfig = NewXrayConfig()

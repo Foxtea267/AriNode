@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/Foxtea267/AriNode/conf"
@@ -13,18 +12,9 @@ var (
 
 func NewCore(c []conf.CoreConfig) (Core, error) {
 	if len(c) == 0 {
-		return nil, errors.New("no have vail core")
+		c = []conf.CoreConfig{conf.DefaultCoreConfig()}
 	}
-	// multi core
-	if len(c) > 1 {
-		return NewSelector(c)
-	}
-	// one core
-	if f, ok := cores[c[0].Type]; ok {
-		return createSafely(f, &c[0])
-	} else {
-		return nil, errors.New("unknown core type")
-	}
+	return NewSelector(c)
 }
 
 func createSafely(factory func(*conf.CoreConfig) (Core, error), config *conf.CoreConfig) (instance Core, err error) {

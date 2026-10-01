@@ -130,6 +130,20 @@ func (o *Options) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+	o.RawOptions = append(json.RawMessage(nil), data...)
+	if o.Core == "" && o.CoreName != "" {
+		return nil
+	}
+	return o.UseCore(o.Core)
+}
+
+// UseCore initializes the core-specific defaults even when Core was omitted.
+func (o *Options) UseCore(value string) error {
+	o.Core = NormalizeCoreType(value)
+	data := o.RawOptions
+	if len(data) == 0 {
+		data = []byte("{}")
+	}
 	switch o.Core {
 	case "xray":
 		o.XrayOptions = NewXrayOptions()
@@ -140,9 +154,6 @@ func (o *Options) UnmarshalJSON(data []byte) error {
 	case "hysteria2":
 		o.RawOptions = data
 		return nil
-	default:
-		o.Core = ""
-		o.RawOptions = data
 	}
 	return nil
 }

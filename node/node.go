@@ -22,6 +22,8 @@ type BindingStatus struct {
 	NodeType  string `json:"type"`
 	MachineID int    `json:"machine_id,omitempty"`
 	State     string `json:"state"`
+	Core      string `json:"core,omitempty"`
+	Port      int    `json:"port,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
 
@@ -139,10 +141,12 @@ func (n *Node) tryPendingLocked() {
 		entry.controller = controller
 		entry.status.State = "running"
 		entry.status.Error = ""
+		entry.status.Core = controller.Options.Core
+		entry.status.Port = controller.info.Common.ServerPort
 		if controller.machinePrimary.Load() {
 			primaries[key] = true
 		}
-		log.WithFields(log.Fields{"panel": c.ApiConfig.APIHost, "node_id": c.ApiConfig.NodeID}).Info("Node started")
+		log.WithFields(log.Fields{"panel": c.ApiConfig.APIHost, "node_id": c.ApiConfig.NodeID, "core": entry.status.Core, "port": entry.status.Port}).Info("Node started")
 	}
 	n.publishLocked()
 }

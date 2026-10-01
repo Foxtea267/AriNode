@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -87,34 +88,47 @@ func isSupported(protocol string, protocols []string) bool {
 
 func (s *Selector) AddNode(tag string, info *panel.NodeInfo, option *conf.Options) error {
 	var core Core
+	if option.CoreName == "" && option.Core == "" {
+		if err := option.UseCore("sing"); err != nil {
+			return err
+		}
+	}
 	if len(option.CoreName) > 0 {
 		// use name to select core
 		if c, ok := s.cores[option.CoreName]; ok {
 			core = c
 		}
 	} else {
-		// use type to select core
-		for _, c := range s.cores {
-			if len(option.Core) == 0 {
-				if !isSupported(info.Type, c.Protocols()) {
-					continue
-				}
-			} else if option.Core != c.Type() {
-				continue
+		// Prefer the unnamed core of this type, then a stable named choice.
+		core = s.cores[option.Core]
+		if core == nil {
+			names := make([]string, 0, len(s.cores))
+			for name := range s.cores {
+				names = append(names, name)
 			}
-			core = c
+			sort.Strings(names)
+			for _, name := range names {
+				if c := s.cores[name]; c.Type() == option.Core {
+					core = c
+					break
+				}
+			}
 		}
 	}
 	if core == nil {
-		return errors.New("the node type is not support")
+		return fmt.Errorf("requested core %q (name %q) is unavailable", option.Core, option.CoreName)
+	}
+	if option.Core != "" && option.Core != core.Type() {
+		return fmt.Errorf("Core %q conflicts with CoreName %q (%s)", option.Core, option.CoreName, core.Type())
+	}
+	if !isSupported(info.Type, core.Protocols()) {
+		return fmt.Errorf("core %s does not support protocol %s", core.Type(), info.Type)
 	}
 	if len(option.Core) == 0 {
-		option.Core = core.Type()
-		err := option.UnmarshalJSON(option.RawOptions)
+		err := option.UseCore(core.Type())
 		if err != nil {
 			return fmt.Errorf("unmarshal option error: %s", err)
 		}
-		option.RawOptions = nil
 	}
 	err := core.AddNode(tag, info, option)
 	if err != nil {
