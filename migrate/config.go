@@ -19,6 +19,7 @@ import (
 )
 
 type xRoot struct {
+	ID         string    `yaml:"id,omitempty"`
 	Panel      xPanel    `yaml:"panel,omitempty"`
 	Nodes      []xNode   `yaml:"nodes,omitempty"`
 	Machine    *xMachine `yaml:"machine,omitempty"`

@@ -125,6 +125,37 @@ func TestMultiInstanceAndCert(t *testing.T) {
 	}
 }
 
+func TestXBCTLGeneratedInstanceIDIsAccepted(t *testing.T) {
+	input := []byte(`kernel:
+  type: singbox
+instances:
+  - id: panel-7
+    panel:
+      url: https://panel.example.com
+      token: secret
+      node_id: 7
+      node_type: vless
+    kernel:
+      type: singbox
+      config_dir: /etc/xboard-node/instances/panel-7
+    node:
+      pull_interval: 60
+    log:
+      level: info
+`)
+	result, err := FromXBNode(input, Options{Offline: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ar aRoot
+	if err := json.Unmarshal(result.Data, &ar); err != nil {
+		t.Fatal(err)
+	}
+	if result.Nodes != 1 || ar.Nodes[0].NodeID != 7 || ar.Nodes[0].NodeType != "vless" || ar.Nodes[0].APIKey != "secret" {
+		t.Fatalf("bad xbctl instance migration: %+v", ar.Nodes)
+	}
+}
+
 func TestExportNamedPanelsAndWarnAboutKomari(t *testing.T) {
 	input := []byte(`{"Cores":[{"Type":"sing"}],"Panels":[{"Name":"a","ApiHost":"https://a.example.com","ApiKey":"a-key"},{"Name":"b","ApiHost":"https://b.example.com","ApiKey":"b-key"}],"Komari":[{"Name":"monitor"}],"Nodes":[{"Panel":"a","Core":"sing","NodeID":1,"NodeType":"vless"},{"Panel":"b","Core":"sing","NodeID":2,"NodeType":"trojan"}]}`)
 	result, err := ToXBNode(input)
