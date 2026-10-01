@@ -37,6 +37,7 @@ type managedNode struct {
 type Node struct {
 	mu            sync.Mutex
 	entries       []*managedNode
+	configured    []conf.NodeConfig
 	core          vCore.Core
 	stop          chan struct{}
 	done          chan struct{}
@@ -79,11 +80,8 @@ func (n *Node) Start(nodes []conf.NodeConfig, core vCore.Core) error {
 		return fmt.Errorf("node manager is already running")
 	}
 	n.core = core
-	n.entries = make([]*managedNode, 0, len(nodes))
-	for _, c := range nodes {
-		n.entries = append(n.entries, newManaged(c))
-	}
-	n.tryPendingLocked()
+	n.configured = append([]conf.NodeConfig(nil), nodes...)
+	n.reconcileLocked(n.discoverBindingsLocked())
 	n.stop = make(chan struct{})
 	n.done = make(chan struct{})
 	interval := n.retryInterval
@@ -104,7 +102,7 @@ func (n *Node) retryLoop(interval time.Duration, stop <-chan struct{}, done chan
 			return
 		case <-ticker.C:
 			n.mu.Lock()
-			n.tryPendingLocked()
+			n.reconcileLocked(n.discoverBindingsLocked())
 			n.mu.Unlock()
 		}
 	}
@@ -204,6 +202,12 @@ func (n *Node) Reconcile(nodes []conf.NodeConfig) error {
 	if n.stop == nil {
 		return fmt.Errorf("node manager is not running")
 	}
+	n.configured = append([]conf.NodeConfig(nil), nodes...)
+	n.reconcileLocked(n.discoverBindingsLocked())
+	return nil
+}
+
+func (n *Node) reconcileLocked(nodes []conf.NodeConfig) {
 	old := make(map[string]*managedNode, len(n.entries))
 	for _, entry := range n.entries {
 		old[bindingKey(entry.config)] = entry
@@ -234,12 +238,20 @@ func (n *Node) Reconcile(nodes []conf.NodeConfig) error {
 	}
 	n.entries = next
 	n.tryPendingLocked()
-	return nil
 }
 
 func validateBindings(nodes []conf.NodeConfig) error {
 	seen := map[string]bool{}
+	machineModes := map[string]bool{}
 	for _, c := range nodes {
+		if c.ApiConfig.MachineID > 0 {
+			mode := c.ApiConfig.MachineAutoDiscover == nil || *c.ApiConfig.MachineAutoDiscover
+			key := machineKey(c)
+			if previous, ok := machineModes[key]; ok && previous != mode {
+				return fmt.Errorf("MachineAutoDiscover must be the same for every binding of a machine")
+			}
+			machineModes[key] = mode
+		}
 		key := bindingKey(c)
 		if seen[key] {
 			return fmt.Errorf("duplicate node binding %s", key)
@@ -273,6 +285,7 @@ func (n *Node) Close() {
 		}
 	}
 	n.entries = nil
+	n.configured = nil
 	n.core = nil
 	n.stop = nil
 	n.done = nil

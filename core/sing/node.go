@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"bytes"
 	"encoding/json"
 
 	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/common/cert"
 	"github.com/Foxtea267/AriNode/conf"
 	"github.com/sagernet/sing-box/option"
 	F "github.com/sagernet/sing/common/format"
@@ -41,6 +43,21 @@ type WsNetworkConfig struct {
 	Headers map[string]string `json:"headers"`
 }
 
+func (c *WsNetworkConfig) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Path    string          `json:"path"`
+		Headers json.RawMessage `json:"headers"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	c.Path = raw.Path
+	if len(raw.Headers) == 0 || bytes.Equal(bytes.TrimSpace(raw.Headers), []byte("[]")) {
+		return nil
+	}
+	return json.Unmarshal(raw.Headers, &c.Headers)
+}
+
 type GrpcNetworkConfig struct {
 	ServiceName string `json:"serviceName"`
 }
@@ -48,6 +65,39 @@ type GrpcNetworkConfig struct {
 type HttpupgradeNetworkConfig struct {
 	Path string `json:"path"`
 	Host string `json:"host"`
+}
+
+func httpTransportSettings(data json.RawMessage) (option.V2RayHTTPOptions, error) {
+	var settings struct {
+		Path   string `json:"path"`
+		Host   any    `json:"host"`
+		Method string `json:"method"`
+	}
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return option.V2RayHTTPOptions{}, err
+		}
+	}
+	if settings.Path == "" {
+		settings.Path = "/"
+	}
+	options := option.V2RayHTTPOptions{Path: settings.Path, Method: settings.Method}
+	switch host := settings.Host.(type) {
+	case string:
+		options.Host = []string{host}
+	case []any:
+		for _, value := range host {
+			name, ok := value.(string)
+			if !ok {
+				return options, fmt.Errorf("invalid HTTP transport host")
+			}
+			options.Host = append(options.Host, name)
+		}
+	case nil:
+	default:
+		return options, fmt.Errorf("invalid HTTP transport host")
+	}
+	return options, nil
 }
 
 func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (option.Inbound, error) {
@@ -76,12 +126,24 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 	var tls option.InboundTLSOptions
 	switch info.Security {
 	case panel.Tls:
+		tls.ServerName = info.TLSSettings.ServerName
+		tls.ALPN = append([]string(nil), info.TLSSettings.ALPN...)
 		if c.CertConfig == nil {
 			return option.Inbound{}, fmt.Errorf("the CertConfig is not vail")
 		}
 		switch c.CertConfig.CertMode {
 		case "none", "":
 			break // disable
+		case "auto":
+			if !info.TLSSettings.AllowInsecure {
+				return option.Inbound{}, fmt.Errorf("TLS requires CertConfig (file, http, dns or self); panel does not allow an automatic self-signed certificate")
+			}
+			tls.Enabled = true
+			tls.ServerName = info.TLSSettings.ServerName
+			tls.Certificate, tls.Key, err = cert.SelfSigned(tls.ServerName)
+			if err != nil {
+				return option.Inbound{}, err
+			}
 		default:
 			tls.Enabled = true
 			tls.CertificatePath = c.CertConfig.CertFile
@@ -130,6 +192,12 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 			Type: n.Network,
 		}
 		switch n.Network {
+		case "http", "h2":
+			t.Type = "http"
+			t.HTTPOptions, err = httpTransportSettings(n.NetworkSettings)
+			if err != nil {
+				return option.Inbound{}, err
+			}
 		case "tcp":
 			if len(n.NetworkSettings) != 0 {
 				network := HttpNetworkConfig{}
@@ -147,7 +215,10 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 							return option.Inbound{}, fmt.Errorf("decode HttpRequest error: %s", err)
 						}
 						t.HTTPOptions.Host = request.Headers.Host
-						t.HTTPOptions.Path = request.Path[0]
+						t.HTTPOptions.Path = "/"
+						if len(request.Path) > 0 {
+							t.HTTPOptions.Path = request.Path[0]
+						}
 						t.HTTPOptions.Method = request.Method
 					}
 				} else {
@@ -267,6 +338,12 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 			Type: n.Network,
 		}
 		switch n.Network {
+		case "http", "h2":
+			t.Type = "http"
+			t.HTTPOptions, err = httpTransportSettings(n.NetworkSettings)
+			if err != nil {
+				return option.Inbound{}, err
+			}
 		case "tcp":
 			t.Type = ""
 		case "ws":
@@ -343,7 +420,9 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 		in.Options = trojanoption
 	case "tuic":
 		in.Type = "tuic"
-		tls.ALPN = append(tls.ALPN, "h3")
+		if len(tls.ALPN) == 0 {
+			tls.ALPN = []string{"h3"}
+		}
 		in.Options = &option.TUICInboundOptions{
 			ListenOptions:     listen,
 			CongestionControl: info.Tuic.CongestionControl,

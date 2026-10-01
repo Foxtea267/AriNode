@@ -51,11 +51,11 @@ class ProvisionController extends PluginController
             if ($type === 'hysteria' && (int) ($server->protocol_settings['version'] ?? 0) === 2) {
                 $type = 'hysteria2';
             }
-            if (!in_array($type, ['vmess', 'vless', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'mieru'], true)) {
+            if (!in_array($type, ['vmess', 'vless', 'trojan', 'shadowsocks', 'hysteria', 'hysteria2', 'tuic', 'anytls', 'mieru'], true)) {
                 return response()->json(['message' => "Node {$id} uses unsupported protocol {$type}"], 422);
             }
-            if ($type === 'mieru' && $core !== 'sing') {
-                return response()->json(['message' => 'Mieru requires the sing core'], 422);
+            if ($core === 'xray' && !in_array($type, ['vmess', 'vless', 'trojan', 'shadowsocks'], true)) {
+                return response()->json(['message' => "Protocol {$type} requires the sing core"], 422);
             }
             if (!$server->enabled) {
                 return response()->json(['message' => "Node {$id} is disabled"], 422);

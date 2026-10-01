@@ -41,7 +41,13 @@ ARINODE_PANEL_TOKEN='XBOARD_TOKEN' ./anctl init --panel https://panel.example.co
 
 **客户端参数仍需正确**：AriNode 兼容面板空数组只作用于服务端，不能改写已经下发到客户端的订阅。若客户端报 `cannot unmarshal JSON array`，将对象字段的 `[]` 改为 `{}` 或删掉该空字段。没有独立下行服务器时删除 `extra.downloadSettings`；`address: null`、指向另一端口且 TLS/Reality 不一致的下行设置不能作为同节点的默认配置。可将[单节点 xhttp extra 示例](example/xhttp-extra.json)填入面板节点的 extra，保留节点自身的 host、path 和 Reality 参数，再更新客户端订阅。
 
-**Mieru**：节点填写 `NodeType: "mieru"`，使用 `sing` 内核或省略 `Core`。程序内置 [Mieru v3.29.0](https://github.com/enfein/mieru/tree/v3.29.0)，支持面板的 TCP/UDP 传输和 `traffic_pattern`；用户名和密码均为订阅用户 UUID，并接入 sing-box 路由、限额和流量上报。防火墙需放行节点对应的 TCP 或 UDP 端口。面板新增机器绑定后，还需将节点加入本机配置的 `Nodes` 并执行 `anctl restart`，目前不会自动发现新增绑定。原 xbnode 配置仍在时，也可用 `anctl migrate from-xbnode --force --switch` 重新读取当前机器绑定。Xboard 插件已支持生成 Mieru 节点配置。
+**协议兼容**：支持 VMess、VLESS、Trojan、经典 SS、SS-2022、HY1、HY2、TUIC v5、AnyTLS、Mieru。面板的 `hysteria + version: 2` 会正确启动 HY2。Xray 用于 VMess、VLESS、Trojan、SS，其余协议使用 `sing`。各协议的实际转发、UDP 和流量统计验证范围见[协议测试矩阵](docs/protocol-compatibility.md)。
+
+**Mieru**：节点填写 `NodeType: "mieru"`，使用 `sing` 内核或省略 `Core`。程序内置 [Mieru v3.29.0](https://github.com/enfein/mieru/tree/v3.29.0)，支持面板的 TCP/UDP 传输和 `traffic_pattern`；用户名和密码均为订阅用户 UUID，并接入 sing-box 路由、限额和流量上报。防火墙需放行节点对应的 TCP 或 UDP 端口。Xboard 插件已支持生成 Mieru 节点配置。
+
+**机器节点自动同步**：机器绑定会在启动时及每 30 秒读取 `/api/v2/server/machine/nodes`。面板新增绑定后自动启动节点，成功读取绑定列表后会停用已解绑节点；未变更的节点保持连接，面板不可达或返回无效数据时保留现有节点。已写入 `Nodes` 的节点使用各自配置，新增节点继承同一机器第一个本地绑定的选项并使用独立运行标签。若只想管理本机明确填写的节点，在该机器的所有本地条目中设置 `MachineAutoDiscover: false`。自动同步不会修改 `config.json`。
+
+**TLS 默认配置**：省略 `CertConfig` 时使用 `CertMode: "auto"`。仅当面板明确设置 `tls_settings.allow_insecure: true` 时自动生成内存中的自签证书；要求客户端校验证书时，应配置 `file`、`http`、`dns` 或 `self`，auto 模式会给出明确错误。显式配置 `none` 仍表示关闭 TLS，不能用于 HY/TUIC/AnyTLS 等必须使用 TLS 的协议。已有显式证书配置保持有效。TUIC 使用面板提供的 ALPN，未提供时为 `h3`；客户端应与之匹配。已兼容面板网络参数/headers 的 PHP 空数组和 Reality 字段的数字/字符串格式。
 
 Xboard 的 `block` 规则支持普通域名及 `*.example.com`（匹配该域名及子域名）、IP/CIDR、`domain:`、`full:`、`keyword:`、`regexp:` 和 `protocol:`。普通域名按域名后缀处理；正则表达式须加 `regexp:` 前缀。规则更新先完整校验再替换，无效更新保留原有规则。旧版本如出现 `invalid domain rule` 且节点为 `retrying`、端口没有监听，请运行 `sudo anctl upgrade` 获取修复。
 
@@ -99,4 +105,4 @@ BBR 命令检查内核支持、写入独立的 sysctl 文件并应用 `bbr + fq`
 
 ## 当前范围
 
-已实现 Xboard UniProxy 节点接口、机器专属 token 的 `/api/v2/server/*` 节点接口、机器负载上报和多节点配置下发。Xboard-Node 的 WebSocket 推送、自动发现机器新节点及握手/合并上报暂未接入。Komari 采用 Agent v2 HTTP 上报，插件提供额外的状态查看页面。
+已实现 Xboard UniProxy 节点接口、机器专属 token 的 `/api/v2/server/*` 节点接口、机器节点自动同步、机器负载上报和多节点配置下发。Xboard-Node 的 WebSocket 推送及握手/合并上报暂未接入。Komari 采用 Agent v2 HTTP 上报，插件提供额外的状态查看页面。

@@ -16,6 +16,14 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 )
 
+func TestAutoTLSRequiresPanelConsent(t *testing.T) {
+	info := &panel.NodeInfo{Type: "trojan", Security: panel.Tls, Common: &panel.CommonNode{ServerPort: 12345}, Trojan: &panel.TrojanNode{Network: "tcp"}}
+	_, err := getInboundOptions("tls-consent", info, &conf.Options{ListenIP: "127.0.0.1", SingOptions: conf.NewSingOptions(), CertConfig: conf.NewCertConfig()})
+	if err == nil {
+		t.Fatal("generated an automatic certificate for a verified client")
+	}
+}
+
 // Verify an omitted core produces an authenticated proxy that forwards bytes,
 // rather than merely accepting a configuration or listening on a port.
 func TestDefaultCoreForwardsVLESSConnection(t *testing.T) {

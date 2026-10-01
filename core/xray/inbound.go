@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 
 	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/common/cert"
 	"github.com/Foxtea267/AriNode/conf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/core"
@@ -99,6 +100,16 @@ func buildInbound(option *conf.Options, nodeInfo *panel.NodeInfo, tag string) (*
 		switch option.CertConfig.CertMode {
 		case "none", "":
 			break // disable
+		case "auto":
+			if !nodeInfo.TLSSettings.AllowInsecure {
+				return nil, fmt.Errorf("TLS requires an explicit CertConfig; panel does not allow self-signed certificates")
+			}
+			certificate, key, err := cert.SelfSigned(nodeInfo.TLSSettings.ServerName)
+			if err != nil {
+				return nil, err
+			}
+			in.StreamSetting.Security = "tls"
+			in.StreamSetting.TLSSettings = &coreConf.TLSConfig{Certs: []*coreConf.TLSCertConfig{{CertStr: certificate, KeyStr: key}}}
 		default:
 			in.StreamSetting.Security = "tls"
 			in.StreamSetting.TLSSettings = &coreConf.TLSConfig{

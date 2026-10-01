@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Foxtea267/AriNode/api/panel"
+	aricert "github.com/Foxtea267/AriNode/common/cert"
+	"github.com/Foxtea267/AriNode/conf"
 	"github.com/apernet/hysteria/core/v2/server"
 	"github.com/apernet/hysteria/extras/v2/correctnet"
 	"github.com/apernet/hysteria/extras/v2/masq"
@@ -18,8 +21,6 @@ import (
 	"github.com/apernet/hysteria/extras/v2/outbounds"
 	"github.com/apernet/hysteria/extras/v2/sniff"
 	eUtils "github.com/apernet/hysteria/extras/v2/utils"
-	"github.com/Foxtea267/AriNode/api/panel"
-	"github.com/Foxtea267/AriNode/conf"
 	"go.uber.org/zap"
 )
 
@@ -55,13 +56,26 @@ const (
 	defaultUDPIdleTimeout      = 60 * time.Second
 )
 
-func (n *Hysteria2node) getTLSConfig(config *conf.Options) (*server.TLSConfig, error) {
+func (n *Hysteria2node) getTLSConfig(info *panel.NodeInfo, config *conf.Options) (*server.TLSConfig, error) {
 	if config.CertConfig == nil {
 		return nil, fmt.Errorf("the CertConfig is not vail")
 	}
 	switch config.CertConfig.CertMode {
 	case "none", "":
 		return nil, fmt.Errorf("the CertMode cannot be none")
+	case "auto":
+		if !info.TLSSettings.AllowInsecure {
+			return nil, fmt.Errorf("TLS requires an explicit CertConfig; panel does not allow self-signed certificates")
+		}
+		certificate, key, err := aricert.SelfSigned(info.TLSSettings.ServerName)
+		if err != nil {
+			return nil, err
+		}
+		pair, err := tls.X509KeyPair([]byte(strings.Join(certificate, "\n")), []byte(strings.Join(key, "\n")))
+		if err != nil {
+			return nil, err
+		}
+		return &server.TLSConfig{Certificates: []tls.Certificate{pair}}, nil
 	default:
 		var certs []tls.Certificate
 		cert, err := tls.LoadX509KeyPair(config.CertConfig.CertFile, config.CertConfig.KeyFile)
@@ -381,7 +395,7 @@ func (n *Hysteria2node) getMasqHandler(tlsconfig *server.TLSConfig, conn net.Pac
 }
 
 func (n *Hysteria2node) getHyConfig(info *panel.NodeInfo, config *conf.Options, c *serverConfig) (*server.Config, error) {
-	tls, err := n.getTLSConfig(config)
+	tls, err := n.getTLSConfig(info, config)
 	if err != nil {
 		return nil, err
 	}

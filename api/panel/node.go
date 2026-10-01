@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -26,6 +27,7 @@ type NodeInfo struct {
 	PullInterval time.Duration
 	RawDNS       RawDNS
 	Rules        Rules
+	TLSSettings  NativeTLSSettings
 
 	// origin
 	VAllss      *VAllssNode
@@ -37,6 +39,12 @@ type NodeInfo struct {
 	Hysteria    *HysteriaNode
 	Hysteria2   *Hysteria2Node
 	Common      *CommonNode
+}
+
+type NativeTLSSettings struct {
+	ServerName    string   `json:"server_name"`
+	AllowInsecure bool     `json:"allow_insecure"`
+	ALPN          []string `json:"alpn"`
 }
 
 type CommonNode struct {
@@ -93,6 +101,70 @@ type EncSettings struct {
 	PrivateKey    string `json:"private_key"`
 }
 
+// Xboard versions emit numeric Reality fields as either numbers or strings.
+func (s *TlsSettings) UnmarshalJSON(data []byte) error {
+	type plain TlsSettings
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for _, key := range []string{"xver", "server_port"} {
+		raw, ok := fields[key]
+		if !ok {
+			continue
+		}
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && raw[0] != '"' && !bytes.Equal(raw, []byte("null")) {
+			var number json.Number
+			if err := json.Unmarshal(raw, &number); err != nil {
+				return fmt.Errorf("invalid TLS %s", key)
+			}
+			fields[key], _ = json.Marshal(number.String())
+		}
+	}
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(encoded, (*plain)(s))
+}
+
+// Empty PHP object arrays occur in all V2Ray transports, not just xhttp.
+func normalizeNetworkSettings(data json.RawMessage) json.RawMessage {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("[]")) {
+		return json.RawMessage(`{}`)
+	}
+	var value any
+	if json.Unmarshal(data, &value) != nil {
+		return data
+	}
+	var normalize func(any)
+	normalize = func(value any) {
+		switch v := value.(type) {
+		case map[string]any:
+			for key, x := range v {
+				if key == "headers" {
+					if a, ok := x.([]any); ok && len(a) == 0 {
+						v[key] = map[string]any{}
+						continue
+					}
+				}
+				normalize(x)
+			}
+		case []any:
+			for _, x := range v {
+				normalize(x)
+			}
+		}
+	}
+	normalize(value)
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return data
+	}
+	return encoded
+}
+
 type RealityConfig struct {
 	Xver         uint64 `json:"Xver"`
 	MinClientVer string `json:"MinClientVer"`
@@ -108,8 +180,9 @@ type ShadowsocksNode struct {
 
 type TrojanNode struct {
 	CommonNode
-	Network         string          `json:"network"`
-	NetworkSettings json.RawMessage `json:"networkSettings"`
+	Network             string          `json:"network"`
+	NetworkSettings     json.RawMessage `json:"networkSettings"`
+	NetworkSettingsBack json.RawMessage `json:"network_settings"`
 }
 
 type TuicNode struct {
@@ -195,8 +268,30 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		},
 	}
 	// parse protocol params
+	var native struct {
+		Version         int                `json:"version"`
+		TLS             *int               `json:"tls"`
+		TLSSettings     NativeTLSSettings  `json:"tls_settings"`
+		TLSSettingsBack *NativeTLSSettings `json:"tlsSettings"`
+	}
+	if err := json.Unmarshal(r.Body(), &native); err != nil {
+		return nil, fmt.Errorf("decode native node settings: %w", err)
+	}
+	if native.TLSSettingsBack != nil {
+		native.TLSSettings = *native.TLSSettingsBack
+	}
+	node.TLSSettings = native.TLSSettings
+	if c.NodeType == "hysteria" && native.Version == 2 {
+		node.Type = "hysteria2"
+	}
+	if c.NodeType == "hysteria" && native.Version != 0 && native.Version != 1 && native.Version != 2 {
+		return nil, fmt.Errorf("unsupported hysteria version %d", native.Version)
+	}
+	if c.NodeType == "tuic" && native.Version != 0 && native.Version != 5 {
+		return nil, fmt.Errorf("unsupported TUIC version %d (requires version 5)", native.Version)
+	}
 	var cm *CommonNode
-	switch c.NodeType {
+	switch node.Type {
 	case "vmess", "vless":
 		rsp := &VAllssNode{}
 		err = json.Unmarshal(r.Body(), rsp)
@@ -213,6 +308,11 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		}
 		cm = &rsp.CommonNode
 		node.VAllss = rsp
+		rsp.NetworkSettings = normalizeNetworkSettings(rsp.NetworkSettings)
+		rsp.Network = strings.ToLower(rsp.Network)
+		if rsp.Network == "" {
+			rsp.Network = "tcp"
+		}
 		node.Security = node.VAllss.Tls
 	case "shadowsocks":
 		rsp := &ShadowsocksNode{}
@@ -231,7 +331,30 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		}
 		cm = &rsp.CommonNode
 		node.Trojan = rsp
+		if len(rsp.NetworkSettingsBack) > 0 {
+			rsp.NetworkSettings = rsp.NetworkSettingsBack
+			rsp.NetworkSettingsBack = nil
+		}
+		rsp.NetworkSettings = normalizeNetworkSettings(rsp.NetworkSettings)
+		rsp.Network = strings.ToLower(rsp.Network)
+		if rsp.Network == "" {
+			rsp.Network = "tcp"
+		}
 		node.Security = Tls
+		if native.TLS != nil {
+			node.Security = *native.TLS
+		}
+		if node.Security == Reality {
+			// Reality uses the same handshake/key fields as VLESS.
+			var settings VAllssNode
+			if err := json.Unmarshal(r.Body(), &settings); err != nil {
+				return nil, err
+			}
+			if settings.TlsSettingsBack != nil {
+				settings.TlsSettings = *settings.TlsSettingsBack
+			}
+			node.VAllss = &settings
+		}
 	case "tuic":
 		rsp := &TuicNode{}
 		err = json.Unmarshal(r.Body(), rsp)

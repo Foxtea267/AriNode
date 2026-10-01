@@ -557,7 +557,10 @@ func toACert(c xCert) (*aCert, error) {
 	if mode == "none" {
 		return nil, nil
 	}
-	if mode != "file" && mode != "http" && mode != "dns" {
+	if mode == "self" && c.CertFile == "" && c.KeyFile == "" {
+		return nil, nil
+	}
+	if mode != "file" && mode != "http" && mode != "dns" && mode != "self" {
 		return nil, fmt.Errorf("unsupported certificate mode %q; migrate certificates manually", mode)
 	}
 	if mode == "http" && c.HTTPPort != 0 && c.HTTPPort != 80 {
@@ -568,10 +571,13 @@ func toACert(c xCert) (*aCert, error) {
 
 func toXCert(c aCert) (xCert, error) {
 	mode := strings.ToLower(c.CertMode)
+	if mode == "auto" {
+		return xCert{CertMode: "self", Domain: c.CertDomain}, nil
+	}
 	if mode == "none" || mode == "" {
 		return xCert{}, nil
 	}
-	if mode != "file" && mode != "http" && mode != "dns" {
+	if mode != "file" && mode != "http" && mode != "dns" && mode != "self" {
 		return xCert{}, fmt.Errorf("unsupported certificate mode %q", mode)
 	}
 	return xCert{CertMode: mode, AutoTLS: mode == "http", Domain: c.CertDomain, CertFile: c.CertFile, KeyFile: c.KeyFile, DNSProvider: c.Provider, Email: c.Email, DNSEnv: c.DNSEnv}, nil
