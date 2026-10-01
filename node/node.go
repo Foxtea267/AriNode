@@ -31,6 +31,7 @@ type managedNode struct {
 	config     conf.NodeConfig
 	controller *Controller
 	status     BindingStatus
+	runtimeTag string
 }
 
 type Node struct {
@@ -139,9 +140,13 @@ func (n *Node) tryPendingLocked() {
 			continue
 		}
 		entry.controller = controller
+		entry.runtimeTag = controller.tag
 		entry.status.State = "running"
 		entry.status.Error = ""
 		entry.status.Core = controller.Options.Core
+		if reporter, ok := n.core.(interface{ NodeCore(string) string }); ok {
+			entry.status.Core = reporter.NodeCore(controller.tag)
+		}
 		entry.status.Port = controller.info.Common.ServerPort
 		if controller.machinePrimary.Load() {
 			primaries[key] = true
@@ -179,6 +184,9 @@ func (n *Node) publishLocked() {
 	status := make([]BindingStatus, len(n.entries))
 	for i, entry := range n.entries {
 		status[i] = entry.status
+		if reporter, ok := n.core.(interface{ NodeCore(string) string }); ok && entry.controller != nil {
+			status[i].Core = reporter.NodeCore(entry.runtimeTag)
+		}
 	}
 	n.snapshot.Store(status)
 }

@@ -13,8 +13,11 @@ import (
 )
 
 type Selector struct {
-	cores map[string]Core
-	nodes sync.Map
+	cores        map[string]Core
+	nodes        sync.Map
+	fallbackMu   sync.Mutex
+	fallbackXray Core
+	closed       bool
 }
 
 func NewSelector(c []conf.CoreConfig) (Core, error) {
@@ -68,9 +71,17 @@ func (s *Selector) Start() error {
 }
 
 func (s *Selector) Close() error {
+	s.fallbackMu.Lock()
+	defer s.fallbackMu.Unlock()
+	s.closed = true
 	var errs []error
 	for i := range s.cores {
 		if err := CloseSafely(s.cores[i]); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if s.fallbackXray != nil {
+		if err := CloseSafely(s.fallbackXray); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -87,6 +98,9 @@ func isSupported(protocol string, protocols []string) bool {
 }
 
 func (s *Selector) AddNode(tag string, info *panel.NodeInfo, option *conf.Options) error {
+	// Resolve per binding: switching a panel transport must not change its requested core.
+	resolved := *option
+	option = &resolved
 	var core Core
 	if option.CoreName == "" && option.Core == "" {
 		if err := option.UseCore("sing"); err != nil {
@@ -124,6 +138,20 @@ func (s *Selector) AddNode(tag string, info *panel.NodeInfo, option *conf.Option
 	if !isSupported(info.Type, core.Protocols()) {
 		return fmt.Errorf("core %s does not support protocol %s", core.Type(), info.Type)
 	}
+	if core.Type() == "sing" && info.VAllss != nil && (info.Type == "vless" || info.Type == "vmess") && (info.VAllss.Network == "xhttp" || info.VAllss.Network == "splithttp") {
+		if option.CoreName != "" {
+			return fmt.Errorf("named sing-box core %q does not support xhttp; select an Xray core", option.CoreName)
+		}
+		var err error
+		core, err = s.xhttpCore()
+		if err != nil {
+			return err
+		}
+		if err := option.UseCore("xray"); err != nil {
+			return fmt.Errorf("initialize xhttp Xray options: %w", err)
+		}
+		log.WithFields(log.Fields{"tag": tag, "transport": info.VAllss.Network, "core": "xray"}).Info("Using Xray for xhttp transport")
+	}
 	if len(option.Core) == 0 {
 		err := option.UseCore(core.Type())
 		if err != nil {
@@ -136,6 +164,52 @@ func (s *Selector) AddNode(tag string, info *panel.NodeInfo, option *conf.Option
 	}
 	s.nodes.Store(tag, core)
 	return nil
+}
+
+// NodeCore reports the actual runtime choice, including the xhttp compatibility core.
+func (s *Selector) NodeCore(tag string) string {
+	if configured, ok := s.nodes.Load(tag); ok {
+		return configured.(Core).Type()
+	}
+	return ""
+}
+
+func (s *Selector) xhttpCore() (Core, error) {
+	if configured := s.cores["xray"]; configured != nil && configured.Type() == "xray" {
+		return configured, nil
+	}
+	names := make([]string, 0, len(s.cores))
+	for name := range s.cores {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if configured := s.cores[name]; configured.Type() == "xray" {
+			return configured, nil
+		}
+	}
+	s.fallbackMu.Lock()
+	defer s.fallbackMu.Unlock()
+	if s.closed {
+		return nil, errors.New("core selector is closed")
+	}
+	if s.fallbackXray != nil {
+		return s.fallbackXray, nil
+	}
+	factory := cores["xray"]
+	if factory == nil {
+		return nil, errors.New("xhttp requires Xray, but this build does not include the Xray core")
+	}
+	configured, err := createSafely(factory, &conf.CoreConfig{Type: "xray", XrayConfig: conf.NewXrayConfig()})
+	if err != nil {
+		return nil, fmt.Errorf("initialize xhttp Xray core: %w", err)
+	}
+	if err := StartSafely(configured); err != nil {
+		_ = CloseSafely(configured)
+		return nil, fmt.Errorf("start xhttp Xray core: %w", err)
+	}
+	s.fallbackXray = configured
+	return configured, nil
 }
 
 func (s *Selector) DelNode(tag string) error {

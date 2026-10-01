@@ -84,6 +84,8 @@ The status API returns the service start time, per-node states and Komari report
 
 Omitted `Cores`, core `Type`, or node `Core` defaults to sing-box. `sing`, `singbox`, and `sing-box` are accepted aliases for `sing`. An explicit `CoreName` selects its named core; other cores require explicit configuration and node selection. The status API includes each running node's active core and listening port. Panel reports alone do not verify client connectivity.
 
+**xhttp / splithttp exception:** the bundled sing-box does not support these transports. A sing-box binding without `CoreName` automatically uses bundled Xray for them, reusing a configured Xray core or starting one on demand. No separate binary is needed. Other transports retain the requested core, including after panel transport changes. A named sing-box binding reports that Xray is required. Native Xboard/PHP empty object arrays in xhttp `extra` are normalized before parsing. Upgrade if an older version logs `unknown transport type: xhttp`.
+
 Use [`example/multi-bindings.config.json`](example/multi-bindings.config.json) to name multiple Xboard panels in `Panels` and reference each one from `Nodes`. Each binding can use its own server or machine token. Bindings on different panels with the same machine ID report machine status independently.
 
 Add multiple `Komari` entries with a unique `Name`, panel `Endpoint`, and client `Token` or `TokenEnv`. AriNode reports host metrics independently to each Komari panel through Agent v2 HTTP RPC. This provides monitoring reports; Komari remote commands and WebSSH are outside this integration. The existing Komari plugin can be installed on each panel to view AriNode's local status API.

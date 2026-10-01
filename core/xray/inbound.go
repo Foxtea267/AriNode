@@ -209,13 +209,20 @@ func buildV2ray(config *conf.Options, nodeInfo *panel.NodeInfo, inbound *coreCon
 		}
 		inbound.Settings = (*json.RawMessage)(&s)
 	}
+	network := v.Network
+	if network == "" {
+		network = "tcp"
+	}
+	if network == "splithttp" {
+		network = "xhttp"
+	}
+
+	t := coreConf.TransportProtocol(network)
+	inbound.StreamSetting = &coreConf.StreamConfig{Network: &t}
 	if len(v.NetworkSettings) == 0 {
 		return nil
 	}
-
-	t := coreConf.TransportProtocol(v.Network)
-	inbound.StreamSetting = &coreConf.StreamConfig{Network: &t}
-	switch v.Network {
+	switch network {
 	case "tcp":
 		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.TCPSettings)
 		if err != nil {
@@ -237,7 +244,11 @@ func buildV2ray(config *conf.Options, nodeInfo *panel.NodeInfo, inbound *coreCon
 			return fmt.Errorf("unmarshal httpupgrade settings error: %s", err)
 		}
 	case "splithttp", "xhttp":
-		err := json.Unmarshal(v.NetworkSettings, &inbound.StreamSetting.SplitHTTPSettings)
+		settings, err := normalizeXHTTPSettings(v.NetworkSettings)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(settings, &inbound.StreamSetting.SplitHTTPSettings)
 		if err != nil {
 			return fmt.Errorf("unmarshal xhttp settings error: %s", err)
 		}

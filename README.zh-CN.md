@@ -37,6 +37,8 @@ ARINODE_PANEL_TOKEN='XBOARD_TOKEN' ./anctl init --panel https://panel.example.co
 
 未填写 `Cores`、内核 `Type` 或节点 `Core` 时，默认使用 sing-box；`sing`、`singbox`、`sing-box` 均可填写，内部统一为 `sing`。指定 `CoreName` 时使用对应的命名内核。选择其他内核时需显式配置该内核及节点绑定。状态接口 `/v1/status` 会显示节点实际使用的 `core` 和监听端口 `port`；面板能收到上报仍需结合客户端连接验证代理可用性。
 
+**xhttp / splithttp 例外**：当前内置的 sing-box 不支持这两种传输。没有指定 `CoreName` 的 sing-box 节点收到此配置时，会自动使用内置 Xray；优先复用已配置的 Xray，否则按需启动默认 Xray，不需要另装程序。普通 TCP 等传输仍使用 sing-box，面板切回普通传输后也会恢复原内核选择。显式指定 sing-box `CoreName` 的节点会提示选择 Xray。Xboard xhttp `extra` 中 PHP 生成的空对象数组也会自动兼容。若日志出现 `unknown transport type: xhttp`，运行 `sudo anctl upgrade`。
+
 Xboard 的 `block` 规则支持普通域名及 `*.example.com`（匹配该域名及子域名）、IP/CIDR、`domain:`、`full:`、`keyword:`、`regexp:` 和 `protocol:`。普通域名按域名后缀处理；正则表达式须加 `regexp:` 前缀。规则更新先完整校验再替换，无效更新保留原有规则。旧版本如出现 `invalid domain rule` 且节点为 `retrying`、端口没有监听，请运行 `sudo anctl upgrade` 获取修复。
 
 多个节点可以分别绑定到不同的 Xboard 面板；参考 [多绑定配置示例](example/multi-bindings.config.json)。在 `Panels` 中为每个面板指定唯一 `Name`、`ApiHost` 和 `ApiKey`（也可使用 `ApiKeyEnv`）；`Nodes` 中通过 `Panel` 引用。机器 token 可在对应面板项中填写 `MachineID`。不同 Xboard 即使使用相同机器 ID，也会分别上报机器状态。
