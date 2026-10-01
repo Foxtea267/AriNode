@@ -2,6 +2,18 @@
 
 AriNode 基于 V2bX 二次开发，保留 sing-box、Xray、Hysteria2 内核，并增加 Xboard 原生节点与机器认证、Komari 状态页面，以及 Linux TCP 调优入口。项目仓库为 [Foxtea267/ariNode](https://github.com/Foxtea267/ariNode)，上游来源与兼容边界见 [README.md](README.md)。
 
+## 一键安装（Linux）
+
+先在 Xboard 创建并启用节点，准备面板地址、服务器密钥及节点类型和 ID，然后在使用 systemd 的 Linux 宿主机执行：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Foxtea267/ariNode/main/scripts/install.sh | sudo bash
+```
+
+脚本会询问这些信息（密钥输入不回显），下载最新正式版，核对 SHA256，安装 `arinode` 和 `anctl`，生成权限为 `0600` 的 `/etc/arinode/config.json`，并启用、启动 `arinode.service`。节点可输入 `vless:1 trojan:2` 等多个绑定；使用机器密钥时填写机器 ID。再次运行会保留现有配置，并走正式版升级流程。脚本需要 `curl`、`tar`、`sha256sum`、`systemctl` 和 Linux `amd64` 或 `arm64`。自动升级依然默认关闭。
+
+安装后用 `anctl status`、`anctl log` 查看状态。多 Xboard、Komari 面板可参考[多绑定配置](example/multi-bindings.config.json)编辑配置后执行 `sudo anctl restart`。
+
 ## 快速部署
 
 1. 在 Xboard 中创建并启用节点，记录节点 ID。可选：创建机器并把节点绑定到机器。

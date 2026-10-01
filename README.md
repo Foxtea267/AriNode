@@ -4,6 +4,18 @@ AriNode is a V2bX based node service with Xboard provisioning and Komari status 
 
 This repository starts from [V2bX](https://github.com/wyx2685/V2bX) commit `71277de69efbbc86c23ad8ae02b68efd174e5756` under MPL-2.0. The Xboard adapter was checked against [Xboard-Node](https://github.com/cedar2025/Xboard-Node) and [Xboard](https://github.com/cedar2025/Xboard). The Komari plugin follows the [Komari plugin SDK](https://github.com/komari-monitor/plugin-sdk).
 
+## One-command install (Linux)
+
+Create and enable your Xboard nodes first. On a Linux host with systemd, run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Foxtea267/ariNode/main/scripts/install.sh | sudo bash
+```
+
+The installer prompts for the Xboard URL, token (hidden input), nodes such as `vless:1 trojan:2`, and an optional machine ID. It downloads the latest stable archive, verifies SHA256, installs `arinode` and `anctl`, creates `/etc/arinode/config.json` with mode `0600`, and starts `arinode.service`. It preserves an existing config and uses the upgrade path on repeated runs. Linux `amd64` or `arm64`, `curl`, `tar`, `sha256sum`, and `systemctl` are required. Automatic upgrades stay off until explicitly enabled. See [the script](scripts/install.sh) before running it.
+
+After installation, use `anctl status` and `anctl log`. For multiple Xboard or Komari panels, edit the [multi-binding config](example/multi-bindings.config.json) and run `sudo anctl restart`.
+
 ## Quick start
 
 1. In Xboard, create and enable the nodes. Note each node's ID and the global server token under server settings.
