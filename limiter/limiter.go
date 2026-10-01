@@ -2,6 +2,7 @@ package limiter
 
 import (
 	"errors"
+	"net/netip"
 	"regexp"
 	"strings"
 	"sync"
@@ -21,7 +22,9 @@ func Init() {
 }
 
 type Limiter struct {
+	ruleMu        sync.RWMutex
 	DomainRules   []*regexp.Regexp
+	IPRules       []netip.Prefix
 	ProtocolRules []string
 	SpeedLimit    int
 	UserOnlineIP  *sync.Map      // Key: TagUUID, value: {Key: Ip, value: Uid}

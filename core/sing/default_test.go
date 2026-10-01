@@ -60,7 +60,10 @@ func TestDefaultCoreForwardsVLESSConnection(t *testing.T) {
 	const uuid = "11111111-1111-4111-8111-111111111111"
 	users := []panel.UserInfo{{Id: 1, Uuid: uuid}}
 	limiter.Init()
-	limiter.AddLimiter("default-test", &conf.LimitConfig{}, users, map[int]int{})
+	l := limiter.AddLimiter("default-test", &conf.LimitConfig{}, users, map[int]int{})
+	if err := l.UpdateRule(&panel.Rules{Match: []string{"*.blocked.example"}}); err != nil {
+		t.Fatal(err)
+	}
 	defer limiter.DeleteLimiter("default-test")
 	if err := server.AddNode("default-test", info, &c.NodeConfig[0].Options); err != nil {
 		t.Fatal(err)

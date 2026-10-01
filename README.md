@@ -18,6 +18,8 @@ Run `sudo anctl bash` to reopen the language and deployment menu. Use `anctl sta
 
 ## Quick start
 
+Xboard `block` matches accept plain domains and `*.example.com` (the domain and its subdomains), IP/CIDR, and the `domain:`, `full:`, `keyword:`, `regexp:` and `protocol:` prefixes. Plain domains match a domain suffix; regexps require `regexp:`. Rule updates are validated before replacing active rules. If an older version reports `invalid domain rule` with a retrying node and no proxy listener, run `sudo anctl upgrade`.
+
 1. In Xboard, create and enable the nodes. Note each node's ID and the global server token under server settings.
 2. Copy `example/arinode.config.json` to `config.json`. Set `ApiHost`, `ApiKey`, `NodeID` and `NodeType`. Add another object under `Nodes` for each additional node.
 3. Run `docker compose up -d --build`. Host networking is used because proxy inbounds are created on the host's ports.

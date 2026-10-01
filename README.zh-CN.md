@@ -37,6 +37,8 @@ ARINODE_PANEL_TOKEN='XBOARD_TOKEN' ./anctl init --panel https://panel.example.co
 
 未填写 `Cores`、内核 `Type` 或节点 `Core` 时，默认使用 sing-box；`sing`、`singbox`、`sing-box` 均可填写，内部统一为 `sing`。指定 `CoreName` 时使用对应的命名内核。选择其他内核时需显式配置该内核及节点绑定。状态接口 `/v1/status` 会显示节点实际使用的 `core` 和监听端口 `port`；面板能收到上报仍需结合客户端连接验证代理可用性。
 
+Xboard 的 `block` 规则支持普通域名及 `*.example.com`（匹配该域名及子域名）、IP/CIDR、`domain:`、`full:`、`keyword:`、`regexp:` 和 `protocol:`。普通域名按域名后缀处理；正则表达式须加 `regexp:` 前缀。规则更新先完整校验再替换，无效更新保留原有规则。旧版本如出现 `invalid domain rule` 且节点为 `retrying`、端口没有监听，请运行 `sudo anctl upgrade` 获取修复。
+
 多个节点可以分别绑定到不同的 Xboard 面板；参考 [多绑定配置示例](example/multi-bindings.config.json)。在 `Panels` 中为每个面板指定唯一 `Name`、`ApiHost` 和 `ApiKey`（也可使用 `ApiKeyEnv`）；`Nodes` 中通过 `Panel` 引用。机器 token 可在对应面板项中填写 `MachineID`。不同 Xboard 即使使用相同机器 ID，也会分别上报机器状态。
 
 节点启动失败时不会停止其他节点；失败绑定每 30 秒重试。配置热更新只重启变更的绑定，未变更节点继续运行。`/v1/status` 会显示各节点的 `running` 或 `retrying` 状态。修改 `Cores` 内核配置后需运行 `sudo anctl restart`。

@@ -146,6 +146,8 @@ type RawDNS struct {
 type Rules struct {
 	Regexp   []string
 	Protocol []string
+	// Match contains native Xboard domain/IP rules; only regexp: is a regexp.
+	Match []string
 }
 
 func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
@@ -269,27 +271,24 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 
 	// parse rules and dns
 	for i := range cm.Routes {
-		var matchs []string
-		if _, ok := cm.Routes[i].Match.(string); ok {
-			matchs = strings.Split(cm.Routes[i].Match.(string), ",")
-		} else if _, ok = cm.Routes[i].Match.([]string); ok {
-			matchs = cm.Routes[i].Match.([]string)
-		} else {
-			temp := cm.Routes[i].Match.([]interface{})
-			matchs = make([]string, len(temp))
-			for i := range temp {
-				matchs[i] = temp[i].(string)
-			}
+		matchs, err := routeMatches(cm.Routes[i].Match)
+		if err != nil {
+			return nil, fmt.Errorf("route %d: %w", cm.Routes[i].Id, err)
 		}
 		switch cm.Routes[i].Action {
 		case "block":
 			for _, v := range matchs {
+				v = strings.TrimSpace(v)
+				if v == "" {
+					continue
+				}
 				if strings.HasPrefix(v, "protocol:") {
 					// protocol
 					node.Rules.Protocol = append(node.Rules.Protocol, strings.TrimPrefix(v, "protocol:"))
-				} else {
-					// domain
+				} else if strings.HasPrefix(v, "regexp:") {
 					node.Rules.Regexp = append(node.Rules.Regexp, strings.TrimPrefix(v, "regexp:"))
+				} else {
+					node.Rules.Match = append(node.Rules.Match, v)
 				}
 			}
 		case "dns":
@@ -322,6 +321,29 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	c.nodeEtag = r.Header().Get("ETag")
 
 	return node, nil
+}
+
+func routeMatches(value interface{}) ([]string, error) {
+	switch v := value.(type) {
+	case nil:
+		return nil, nil
+	case string:
+		return strings.Split(v, ","), nil
+	case []string:
+		return v, nil
+	case []interface{}:
+		matches := make([]string, len(v))
+		for i, item := range v {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("match %d must be a string", i)
+			}
+			matches[i] = text
+		}
+		return matches, nil
+	default:
+		return nil, fmt.Errorf("match must be a string or string array")
+	}
 }
 
 func intervalToTime(i interface{}) time.Duration {
