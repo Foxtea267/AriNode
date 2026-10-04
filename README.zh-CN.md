@@ -45,6 +45,8 @@ ARINODE_PANEL_TOKEN='XBOARD_TOKEN' ./anctl init --panel https://panel.example.co
 
 **Mieru**：节点填写 `NodeType: "mieru"`，使用 `sing` 内核或省略 `Core`。程序内置 [Mieru v3.29.0](https://github.com/enfein/mieru/tree/v3.29.0)，支持面板的 TCP/UDP 传输和 `traffic_pattern`；用户名和密码均为订阅用户 UUID，并接入 sing-box 路由、限额和流量上报。防火墙需放行节点对应的 TCP 或 UDP 端口。Xboard 插件已支持生成 Mieru 节点配置。
 
+**到期、封禁与用户撤销**：节点以 Xboard `/user` 返回的可用用户列表为准，原生接口没有下发套餐到期时间。授权轮询间隔使用面板 `pull_interval`，上限为 30 秒，实际生效还取决于面板缓存、响应及网络耗时；不能承诺到期瞬间停用。成功收到删除或空用户列表后，Mieru/AnyTLS 会关闭对应用户的已有 TCP/UDP 会话并拒绝新连接和复用会话的新请求，其他用户继续工作。先应用用户撤销再处理节点配置；配置请求/热更新失败不会恢复已撤销用户。内核更新失败会重新获取完整用户列表，避免 ETag/304 跳过重试。面板不可达时只能保留最后一次有效授权。
+
 **机器节点自动同步**：机器绑定会在启动时及每 30 秒读取 `/api/v2/server/machine/nodes`。面板新增绑定后自动启动节点，成功读取绑定列表后会停用已解绑节点；未变更的节点保持连接，面板不可达或返回无效数据时保留现有节点。已写入 `Nodes` 的节点使用各自配置，新增节点继承同一机器第一个本地绑定的选项并使用独立运行标签。若只想管理本机明确填写的节点，在该机器的所有本地条目中设置 `MachineAutoDiscover: false`。自动同步不会修改 `config.json`。
 
 **TLS 默认配置**：省略 `CertConfig` 时使用 `CertMode: "auto"`。仅当面板明确设置 `tls_settings.allow_insecure: true` 时自动生成内存中的自签证书；要求客户端校验证书时，应配置 `file`、`http`、`dns` 或 `self`，auto 模式会给出明确错误。显式配置 `none` 仍表示关闭 TLS，不能用于 HY/TUIC/AnyTLS 等必须使用 TLS 的协议。已有显式证书配置保持有效。TUIC 使用面板提供的 ALPN，未提供时为 `h3`；客户端应与之匹配。已兼容面板网络参数/headers 的 PHP 空数组和 Reality 字段的数字/字符串格式。

@@ -14,7 +14,7 @@ import (
 func (c *Controller) startTasks(node *panel.NodeInfo) {
 	// fetch node info task
 	c.nodeInfoMonitorPeriodic = &task.Task{
-		Interval: node.PullInterval,
+		Interval: authorizationInterval(node.PullInterval),
 		Execute:  c.nodeInfoMonitor,
 	}
 	// fetch user list task
@@ -50,20 +50,17 @@ func (c *Controller) startTasks(node *panel.NodeInfo) {
 	}
 }
 
+// The node API has no expiration timestamp. Bound the polling delay, and apply
+// authorization before fetching/reloading node configuration so a broken config
+// cannot keep expired users alive.
+func authorizationInterval(interval time.Duration) time.Duration {
+	if interval <= 0 || interval > 30*time.Second {
+		return 30 * time.Second
+	}
+	return interval
+}
+
 func (c *Controller) nodeInfoMonitor() (err error) {
-	// get node info
-	newN := c.pendingNode
-	if newN == nil {
-		newN, err = c.apiClient.GetNodeInfo()
-	}
-	if err != nil {
-		log.WithFields(log.Fields{
-			"tag": c.tag,
-			"err": err,
-		}).Error("Get node info failed")
-		return nil
-	}
-	// get user info
 	newU, err := c.apiClient.GetUserList()
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -72,25 +69,39 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 		}).Error("Get user list failed")
 		return nil
 	}
-	// get user alive
-	newA, err := c.apiClient.GetUserAlive()
+	if err := c.applyUserList(newU, nil); err != nil {
+		c.apiClient.InvalidateUserCache()
+		log.WithError(err).WithField("tag", c.tag).Error("Apply user list failed; will retry full snapshot")
+		return nil
+	}
+	// Alive/config requests must not delay applying a valid revocation snapshot.
+	newA, aliveErr := c.apiClient.GetUserAlive()
+	if aliveErr != nil {
+		log.WithError(aliveErr).WithField("tag", c.tag).Error("Get alive list failed")
+	} else {
+		c.limiter.AliveList, c.aliveMap = newA, newA
+	}
+	newN := c.pendingNode
+	if newN == nil {
+		newN, err = c.apiClient.GetNodeInfo()
+	}
 	if err != nil {
-		log.WithFields(log.Fields{
-			"tag": c.tag,
-			"err": err,
-		}).Error("Get alive list failed")
+		log.WithError(err).WithField("tag", c.tag).Error("Get node info failed; user authorization already synchronized")
 		return nil
 	}
 	if newN != nil {
 		c.pendingNode = newN
-		if err := c.reloadNode(newN, newU, newA); err != nil {
+		if err := c.reloadNode(newN, nil, newA); err != nil {
 			log.WithError(err).WithField("tag", c.tag).Error("Node reload failed; will retry")
 		}
-		return nil
 	}
-	// update alive list
+	return nil
+}
+
+func (c *Controller) applyUserList(newU []panel.UserInfo, newA map[int]int) error {
 	if newA != nil {
 		c.limiter.AliveList = newA
+		c.aliveMap = newA
 	}
 	// node no changed, check users
 	if newU == nil {
@@ -99,46 +110,39 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 	deleted, added := compareUserList(c.userList, newU)
 	if len(deleted) > 0 {
 		// have deleted users
-		err = c.server.DelUsers(deleted, c.tag, c.info)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"tag": c.tag,
-				"err": err,
-			}).Error("Delete users failed")
-			return nil
+		if err := c.server.DelUsers(deleted, c.tag, c.info); err != nil {
+			return fmt.Errorf("delete users: %w", err)
+		}
+		c.limiter.UpdateUser(c.tag, nil, deleted)
+		// Commit successful revocations even when adding another user fails below.
+		removed := make(map[string]bool, len(deleted))
+		for _, user := range deleted {
+			removed[user.Uuid] = true
+		}
+		remaining := make([]panel.UserInfo, 0, len(c.userList))
+		for _, user := range c.userList {
+			if !removed[user.Uuid] {
+				remaining = append(remaining, user)
+			}
+		}
+		c.userList = remaining
+		if c.LimitConfig.EnableDynamicSpeedLimit {
+			for _, user := range deleted {
+				delete(c.traffic, user.Uuid)
+			}
 		}
 	}
 	if len(added) > 0 {
 		// have added users
-		_, err = c.server.AddUsers(&vCore.AddUsersParams{
+		_, err := c.server.AddUsers(&vCore.AddUsersParams{
 			Tag:      c.tag,
 			NodeInfo: c.info,
 			Users:    added,
 		})
 		if err != nil {
-			log.WithFields(log.Fields{
-				"tag": c.tag,
-				"err": err,
-			}).Error("Add users failed")
-			return nil
+			return fmt.Errorf("add users: %w", err)
 		}
-	}
-	if len(added) > 0 || len(deleted) > 0 {
-		// update Limiter
-		c.limiter.UpdateUser(c.tag, added, deleted)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"tag": c.tag,
-				"err": err,
-			}).Error("limiter users failed")
-			return nil
-		}
-		// clear traffic record
-		if c.LimitConfig.EnableDynamicSpeedLimit {
-			for i := range deleted {
-				delete(c.traffic, deleted[i].Uuid)
-			}
-		}
+		c.limiter.UpdateUser(c.tag, added, nil)
 	}
 	c.userList = newU
 	if len(added)+len(deleted) != 0 {
@@ -210,7 +214,7 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 	c.pendingNode = nil
 	c.traffic = make(map[string]int64)
 	if c.nodeInfoMonitorPeriodic != nil && next.PullInterval > 0 {
-		_ = c.nodeInfoMonitorPeriodic.SetInterval(next.PullInterval)
+		_ = c.nodeInfoMonitorPeriodic.SetInterval(authorizationInterval(next.PullInterval))
 	}
 	if c.userReportPeriodic != nil && next.PushInterval > 0 {
 		_ = c.userReportPeriodic.SetInterval(next.PushInterval)

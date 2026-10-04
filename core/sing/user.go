@@ -8,7 +8,6 @@ import (
 	"github.com/Foxtea267/AriNode/common/counter"
 	"github.com/Foxtea267/AriNode/core"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/protocol/anytls"
 	"github.com/sagernet/sing-box/protocol/hysteria"
 	"github.com/sagernet/sing-box/protocol/hysteria2"
 	"github.com/sagernet/sing-box/protocol/shadowsocks"
@@ -25,9 +24,6 @@ func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
 	}
 	b.users.mapLock.Lock()
 	defer b.users.mapLock.Unlock()
-	for i := range p.Users {
-		b.users.uidMap[p.Users[i].Uuid] = p.Users[i].Id
-	}
 	switch p.NodeInfo.Type {
 	case "mieru":
 		err = in.(*mieruInbound).AddUsers(p.Users)
@@ -108,17 +104,18 @@ func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
 		}
 		err = in.(*hysteria2.Inbound).AddUsers(us, id)
 	case "anytls":
-		us := make([]option.AnyTLSUser, len(p.Users))
-		for i := range p.Users {
-			us[i] = option.AnyTLSUser{
-				Name:     p.Users[i].Uuid,
-				Password: p.Users[i].Uuid,
-			}
-		}
-		err = in.(*anytls.Inbound).AddUsers(us)
+		err = in.(*anyTLSInbound).AddUsers(p.Users)
+	default:
+		return 0, errors.New("unsupported user protocol")
 	}
 	if err != nil {
 		return 0, err
+	}
+	if b.users.uidMap[p.Tag] == nil {
+		b.users.uidMap[p.Tag] = make(map[string]int)
+	}
+	for _, user := range p.Users {
+		b.users.uidMap[p.Tag][user.Uuid] = user.Id
 	}
 	return len(p.Users), err
 }
@@ -153,12 +150,12 @@ func (b *Sing) GetUserTrafficSlice(tag string, reset bool) ([]panel.UserTraffic,
 					traffic.UpCounter.Store(0)
 					traffic.DownCounter.Store(0)
 				}
-				if b.users.uidMap[uuid] == 0 {
+				if b.users.uidMap[tag][uuid] == 0 {
 					c.Delete(uuid)
 					return true
 				}
 				trafficSlice = append(trafficSlice, panel.UserTraffic{
-					UID:      b.users.uidMap[uuid],
+					UID:      b.users.uidMap[tag][uuid],
 					Upload:   up,
 					Download: down,
 				})
@@ -198,7 +195,9 @@ func (b *Sing) DelUsers(users []panel.UserInfo, tag string, info *panel.NodeInfo
 		case "hysteria2":
 			del = i.(*hysteria2.Inbound)
 		case "anytls":
-			del = i.(*anytls.Inbound)
+			del = i.(*anyTLSInbound)
+		default:
+			return errors.New("unsupported user protocol")
 		}
 	} else {
 		return errors.New("the inbound not found")
@@ -207,16 +206,17 @@ func (b *Sing) DelUsers(users []panel.UserInfo, tag string, info *panel.NodeInfo
 	b.users.mapLock.Lock()
 	defer b.users.mapLock.Unlock()
 	for i := range users {
+		uuids[i] = users[i].Uuid
+	}
+	if err := del.DelUsers(uuids); err != nil {
+		return err
+	}
+	for i := range users {
 		if v, ok := b.hookServer.counter.Load(tag); ok {
 			c := v.(*counter.TrafficCounter)
 			c.Delete(users[i].Uuid)
 		}
-		delete(b.users.uidMap, users[i].Uuid)
-		uuids[i] = users[i].Uuid
-	}
-	err := del.DelUsers(uuids)
-	if err != nil {
-		return err
+		delete(b.users.uidMap[tag], users[i].Uuid)
 	}
 	return nil
 }

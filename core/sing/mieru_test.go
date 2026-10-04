@@ -76,7 +76,8 @@ func TestMieruAuthenticatedForwarding(t *testing.T) {
 			defer server.Close()
 			tag := "mieru-test-" + transport
 			const uuid = "11111111-1111-4111-8111-111111111111"
-			users := []panel.UserInfo{{Id: 1, Uuid: uuid}}
+			const healthyUUID = "22222222-2222-4222-8222-222222222222"
+			users := []panel.UserInfo{{Id: 1, Uuid: uuid}, {Id: 2, Uuid: healthyUUID}}
 			limiter.Init()
 			limiter.AddLimiter(tag, &conf.LimitConfig{}, users, map[int]int{})
 			defer limiter.DeleteLimiter(tag)
@@ -155,18 +156,58 @@ func TestMieruAuthenticatedForwarding(t *testing.T) {
 			if string(b[:n]) != string(payload) {
 				t.Fatal("incorrect UDP response")
 			}
-			if err := server.DelUsers(users, tag, info); err != nil {
+			healthy := mieruTestClient(t, port, transport, healthyUUID, info.Mieru.TrafficPattern)
+			healthyConn, err := healthy.DialContext(ctx, echo.Addr())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer healthyConn.Close()
+			healthyConn.SetDeadline(time.Now().Add(time.Second))
+			if _, err := healthyConn.Write(payload); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.ReadFull(healthyConn, response); err != nil {
+				t.Fatal(err)
+			}
+			if err := server.DelUsers(users[:1], tag, info); err != nil {
 				t.Fatal(err)
 			}
 			conn.SetReadDeadline(time.Now().Add(time.Second))
 			if _, err := conn.Read(b); err == nil {
 				t.Fatal("revoked session remains open")
 			}
+			udpStream.SetReadDeadline(time.Now().Add(time.Second))
+			if _, _, err := packet.ReadFrom(b); err == nil {
+				t.Fatal("revoked UDP association remains open")
+			}
+			healthyConn.SetDeadline(time.Now().Add(time.Second))
+			if _, err := healthyConn.Write(payload); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.ReadFull(healthyConn, response); err != nil {
+				t.Fatalf("healthy user's session closed: %v", err)
+			}
 			// Existing multiplexed transports must not create sessions for revoked users.
 			rejected, err := c.DialContext(ctx, echo.Addr())
 			if err == nil {
 				rejected.Close()
 				t.Fatal("revoked user reconnected")
+			}
+			if err := server.DelUsers(users[1:], tag, info); err != nil {
+				t.Fatal(err)
+			}
+			healthyConn.SetReadDeadline(time.Now().Add(time.Second))
+			if _, err := healthyConn.Read(b); err == nil {
+				t.Fatal("last user's session remains open after empty snapshot")
+			}
+			fresh := mieruTestClient(t, port, transport, uuid, info.Mieru.TrafficPattern)
+			freshCtx, stopFresh := context.WithTimeout(context.Background(), 3*time.Second)
+			defer stopFresh()
+			stopOnTimeout := context.AfterFunc(freshCtx, func() { fresh.Stop() })
+			defer stopOnTimeout()
+			if conn, err := fresh.DialContext(freshCtx, echo.Addr()); err == nil {
+				conn.Close()
+				t.Fatal("revoked user authenticated through fresh transport")
 			}
 		})
 	}

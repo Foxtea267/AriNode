@@ -1,8 +1,6 @@
 package node
 
 import (
-	"strconv"
-
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/common/sysstatus"
 	log "github.com/sirupsen/logrus"
@@ -71,18 +69,16 @@ func (c *Controller) reportUserTrafficTask() (err error) {
 }
 
 func compareUserList(old, new []panel.UserInfo) (deleted, added []panel.UserInfo) {
-	oldMap := make(map[string]int)
+	oldMap := make(map[panel.UserInfo]int)
 	for i, user := range old {
-		key := user.Uuid + strconv.Itoa(user.SpeedLimit)
-		oldMap[key] = i
+		oldMap[user] = i
 	}
 
 	for _, user := range new {
-		key := user.Uuid + strconv.Itoa(user.SpeedLimit)
-		if _, exists := oldMap[key]; !exists {
+		if _, exists := oldMap[user]; !exists {
 			added = append(added, user)
 		} else {
-			delete(oldMap, key)
+			delete(oldMap, user)
 		}
 	}
 

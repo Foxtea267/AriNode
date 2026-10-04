@@ -30,6 +30,10 @@ type AliveMap struct {
 	Alive map[int]int `json:"alive"`
 }
 
+// Retry the full snapshot if applying a fetched user list to the core fails.
+// Otherwise the next 304 could leave revoked credentials installed indefinitely.
+func (c *Client) InvalidateUserCache() { c.userEtag = "" }
+
 // GetUserList will pull user from v2board
 func (c *Client) GetUserList() ([]UserInfo, error) {
 	path := c.endpoint("user")

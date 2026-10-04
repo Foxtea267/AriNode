@@ -507,5 +507,10 @@ func (b *Sing) DelNode(tag string) error {
 	if err != nil {
 		return fmt.Errorf("delete inbound error: %s", err)
 	}
+	b.users.mapLock.Lock()
+	delete(b.users.uidMap, tag)
+	b.users.mapLock.Unlock()
+	b.hookServer.counter.Delete(tag)
+	delete(b.nodeReportMinTrafficBytes, tag)
 	return nil
 }
