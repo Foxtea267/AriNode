@@ -79,7 +79,8 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 	if aliveErr != nil {
 		log.WithError(aliveErr).WithField("tag", c.tag).Error("Get alive list failed")
 	} else {
-		c.limiter.AliveList, c.aliveMap = newA, newA
+		c.limiter.SetAliveList(newA, c.apiClient.AliveIPs)
+		c.aliveMap = newA
 	}
 	newN := c.pendingNode
 	if newN == nil {
@@ -100,7 +101,7 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 
 func (c *Controller) applyUserList(newU []panel.UserInfo, newA map[int]int) error {
 	if newA != nil {
-		c.limiter.AliveList = newA
+		c.limiter.SetAliveList(newA, c.apiClient.AliveIPs)
 		c.aliveMap = newA
 	}
 	// node no changed, check users
@@ -207,6 +208,7 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 		limiter.DeleteLimiter(oldTag)
 	}
 	c.limiter = limiter.AddLimiter(newTag, &c.LimitConfig, users, alive)
+	c.limiter.SetAliveList(alive, c.apiClient.AliveIPs)
 	if err := c.limiter.UpdateRule(&next.Rules); err != nil {
 		return fmt.Errorf("update rule: %w", err)
 	}

@@ -1,8 +1,8 @@
 {
   "name": "AriNode 节点下发",
   "code": "ari_node",
-  "version": "0.1.0",
-  "description": "为 AriNode 下发选定 Xboard 节点及服务器通信密钥",
+  "version": "0.2.0",
+  "description": "下发 AriNode 节点配置，支持 DNS 多 IP 节点组与多服务器上报聚合",
   "author": "AriNode",
   "type": "feature",
   "config": {}

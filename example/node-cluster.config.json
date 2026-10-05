@@ -1,0 +1,17 @@
+{
+  "Log": { "Level": "info" },
+  "Cores": [{ "Type": "sing" }],
+  "Nodes": [
+    {
+      "ApiHost": "https://panel.example.com",
+      "ApiKey": "YOUR_XBOARD_SERVER_TOKEN",
+      "NodeID": 7,
+      "NodeType": "vless",
+      "Timeout": 30,
+      "Cluster": {
+        "Domain": "pool.example.com",
+        "MemberID": "hk-01"
+      }
+    }
+  ]
+}

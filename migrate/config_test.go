@@ -39,6 +39,13 @@ func TestFromXBNodeDiscoversSingleNodeAndRoundTrips(t *testing.T) {
 	}
 }
 
+func TestExportDoesNotSilentlyDisableSharedNodeAggregation(t *testing.T) {
+	input := []byte(`{"Cores":[{"Type":"sing"}],"Nodes":[{"Core":"sing","ApiHost":"https://panel.example.com","ApiKey":"shared","NodeID":7,"NodeType":"vless","Cluster":{"Domain":"pool.example.com","MemberID":"hk-01"}}]}`)
+	if _, err := ToXBNode(input); err == nil || !strings.Contains(err.Error(), "cluster reporting") {
+		t.Fatal("shared-node export silently lost group reporting")
+	}
+}
+
 func TestGenericV2RayTypeDiscoversActualProtocol(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"protocol":"vless"}`))

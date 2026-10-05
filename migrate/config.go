@@ -309,6 +309,11 @@ func ToXBNode(data []byte) (Result, error) {
 	machines := map[string]int{}
 	machineTokens := map[string]string{}
 	for i, n := range in.Nodes {
+		if i < len(raw.Nodes) {
+			if cluster, ok := raw.Nodes[i]["Cluster"]; ok && string(cluster) != "null" {
+				return Result{}, fmt.Errorf("Nodes[%d]: Xboard-Node does not support AriNode cluster reporting; remove Cluster only after separating the shared node bindings", i)
+			}
+		}
 		if n.Panel != "" {
 			binding, ok := panels[n.Panel]
 			if !ok {

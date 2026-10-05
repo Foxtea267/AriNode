@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Foxtea267/AriNode/conf"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,20 +15,26 @@ import (
 )
 
 var (
-	initPanel     string
-	initToken     string
-	initCore      string
-	initOutput    string
-	initForce     bool
-	initNodes     []string
-	initMachineID int
+	initPanel         string
+	initToken         string
+	initCore          string
+	initOutput        string
+	initForce         bool
+	initNodes         []string
+	initMachineID     int
+	initClusterDomain string
+	initClusterMember string
 )
 
 var initCommand = &cobra.Command{
 	Use:   "init",
 	Short: "Generate an Xboard node or machine binding configuration",
 	RunE: func(_ *cobra.Command, _ []string) error {
-		return writeInitialConfig(initPanel, initToken, initCore, initOutput, initNodes, initMachineID, initForce)
+		cluster, err := clusterValues(initClusterDomain, initClusterMember)
+		if err != nil {
+			return err
+		}
+		return writeInitialConfigWithCluster(initPanel, initToken, initCore, initOutput, initNodes, initMachineID, initForce, cluster)
 	},
 }
 
@@ -39,10 +46,25 @@ func init() {
 	initCommand.Flags().StringArrayVar(&initNodes, "node", nil, "node binding as type:id; repeat for multiple nodes")
 	initCommand.Flags().IntVar(&initMachineID, "machine-id", 0, "Xboard machine ID for machine-token authentication")
 	initCommand.Flags().BoolVar(&initForce, "force", false, "replace an existing config")
+	initCommand.Flags().StringVar(&initClusterDomain, "cluster-domain", "", "shared DNS hostname for this node group")
+	initCommand.Flags().StringVar(&initClusterMember, "cluster-member", "", "unique server ID in the node group")
 	command.AddCommand(initCommand)
 }
 
 func writeInitialConfig(panel, token, core, output string, nodes []string, machineID int, force bool) error {
+	return writeInitialConfigWithCluster(panel, token, core, output, nodes, machineID, force, nil)
+}
+func clusterValues(domain, member string) (*conf.ClusterConfig, error) {
+	if domain == "" && member == "" {
+		return nil, nil
+	}
+	cluster := &conf.ClusterConfig{Domain: domain, MemberID: member}
+	return cluster, cluster.Validate()
+}
+func writeInitialConfigWithCluster(panel, token, core, output string, nodes []string, machineID int, force bool, cluster *conf.ClusterConfig) error {
+	if err := cluster.Validate(); err != nil {
+		return err
+	}
 	panel = strings.TrimRight(strings.TrimSpace(panel), "/")
 	u, err := url.Parse(panel)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -64,13 +86,14 @@ func writeInitialConfig(panel, token, core, output string, nodes []string, machi
 		return errors.New("--machine-id cannot be negative")
 	}
 	type binding struct {
-		Core      string `json:"Core"`
-		APIHost   string `json:"ApiHost"`
-		APIKey    string `json:"ApiKey"`
-		NodeID    int    `json:"NodeID"`
-		MachineID int    `json:"MachineID,omitempty"`
-		NodeType  string `json:"NodeType"`
-		Timeout   int    `json:"Timeout"`
+		Cluster   *conf.ClusterConfig `json:"Cluster,omitempty"`
+		Core      string              `json:"Core"`
+		APIHost   string              `json:"ApiHost"`
+		APIKey    string              `json:"ApiKey"`
+		NodeID    int                 `json:"NodeID"`
+		MachineID int                 `json:"MachineID,omitempty"`
+		NodeType  string              `json:"NodeType"`
+		Timeout   int                 `json:"Timeout"`
 	}
 	bindings := make([]binding, 0, len(nodes))
 	seen := map[string]bool{}
@@ -94,7 +117,7 @@ func writeInitialConfig(panel, token, core, output string, nodes []string, machi
 			return fmt.Errorf("duplicate node %s", key)
 		}
 		seen[key] = true
-		bindings = append(bindings, binding{Core: core, APIHost: panel, APIKey: token, NodeID: id, MachineID: machineID, NodeType: typ, Timeout: 30})
+		bindings = append(bindings, binding{Core: core, APIHost: panel, APIKey: token, NodeID: id, MachineID: machineID, NodeType: typ, Timeout: 30, Cluster: cluster})
 	}
 	config := struct {
 		Log   map[string]string   `json:"Log"`

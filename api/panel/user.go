@@ -27,7 +27,8 @@ type UserListBody struct {
 }
 
 type AliveMap struct {
-	Alive map[int]int `json:"alive"`
+	Alive map[int]int      `json:"alive"`
+	IPs   map[int][]string `json:"ips,omitempty"`
 }
 
 // Retry the full snapshot if applying a fetched user list to the core fails.
@@ -104,18 +105,31 @@ func (c *Client) GetUserList() ([]UserInfo, error) {
 func (c *Client) GetUserAlive() (map[int]int, error) {
 	c.AliveMap = &AliveMap{}
 	path := c.endpoint("alivelist")
+	if c.Cluster != nil {
+		path = clusterBase + "alivelist"
+	}
 	r, err := c.client.R().
 		ForceContentType("application/json").
 		Get(path)
 	if err != nil || r == nil || r.StatusCode() >= 399 {
+		if c.Cluster != nil {
+			return nil, fmt.Errorf("cluster alive list is unavailable")
+		}
 		c.AliveMap.Alive = make(map[int]int)
 		return c.AliveMap.Alive, nil
 	}
 	if err := json.Unmarshal(r.Body(), c.AliveMap); err != nil {
+		if c.Cluster != nil {
+			return nil, fmt.Errorf("decode cluster alive list: %w", err)
+		}
 		fmt.Printf("unmarshal user alive list error: %s", err)
 		c.AliveMap.Alive = make(map[int]int)
 	}
+	if c.Cluster != nil && (c.AliveMap.Alive == nil || c.AliveMap.IPs == nil) {
+		return nil, fmt.Errorf("cluster alive list is missing required fields")
+	}
 
+	c.AliveIPs = c.AliveMap.IPs
 	return c.AliveMap.Alive, nil
 }
 

@@ -3,6 +3,7 @@ package node
 import (
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/common/task"
@@ -13,6 +14,8 @@ import (
 )
 
 type Controller struct {
+	pendingClusterReport      *panel.ClusterReport
+	clusterAlive              map[int]map[string]time.Time
 	server                    vCore.Core
 	apiClient                 *panel.Client
 	machinePrimary            atomic.Bool
@@ -44,6 +47,9 @@ func NewController(server vCore.Core, api *panel.Client, config *conf.Options) *
 
 // Start implement the Start() function of the service interface
 func (c *Controller) Start() error {
+	if err := c.apiClient.CheckCluster(); err != nil {
+		return err
+	}
 	// First fetch Node Info
 	var err error
 	node, err := c.apiClient.GetNodeInfo()
@@ -75,6 +81,7 @@ func (c *Controller) Start() error {
 		return fmt.Errorf("update rule error: %s", err)
 	}
 	c.limiter = l
+	l.SetAliveList(c.aliveMap, c.apiClient.AliveIPs)
 	if node.Security == panel.Tls {
 		err = c.requestCert()
 		if err != nil {

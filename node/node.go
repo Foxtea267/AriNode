@@ -17,14 +17,16 @@ import (
 const defaultRetryInterval = 30 * time.Second
 
 type BindingStatus struct {
-	Panel     string `json:"panel"`
-	NodeID    int    `json:"id"`
-	NodeType  string `json:"type"`
-	MachineID int    `json:"machine_id,omitempty"`
-	State     string `json:"state"`
-	Core      string `json:"core,omitempty"`
-	Port      int    `json:"port,omitempty"`
-	Error     string `json:"error,omitempty"`
+	ClusterDomain string `json:"cluster_domain,omitempty"`
+	ClusterMember string `json:"cluster_member,omitempty"`
+	Panel         string `json:"panel"`
+	NodeID        int    `json:"id"`
+	NodeType      string `json:"type"`
+	MachineID     int    `json:"machine_id,omitempty"`
+	State         string `json:"state"`
+	Core          string `json:"core,omitempty"`
+	Port          int    `json:"port,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 type managedNode struct {
@@ -63,7 +65,12 @@ func machineKey(c conf.NodeConfig) string {
 
 func newManaged(c conf.NodeConfig) *managedNode {
 	a := c.ApiConfig
-	return &managedNode{config: c, status: BindingStatus{Panel: a.APIHost, NodeID: a.NodeID, NodeType: a.NodeType, MachineID: a.MachineID, State: "pending"}}
+	entry := &managedNode{config: c, status: BindingStatus{Panel: a.APIHost, NodeID: a.NodeID, NodeType: a.NodeType, MachineID: a.MachineID, State: "pending"}}
+	if a.Cluster != nil {
+		entry.status.ClusterDomain = a.Cluster.Domain
+		entry.status.ClusterMember = a.Cluster.MemberID
+	}
+	return entry
 }
 
 // Start attempts every binding. A failed binding stays pending for automatic retry.
@@ -111,7 +118,7 @@ func (n *Node) retryLoop(interval time.Duration, stop <-chan struct{}, done chan
 func (n *Node) tryPendingLocked() {
 	primaries := map[string]bool{}
 	for _, entry := range n.entries {
-		if entry.controller != nil && entry.config.ApiConfig.MachineID > 0 {
+		if entry.controller != nil && entry.config.ApiConfig.Cluster == nil && entry.config.ApiConfig.MachineID > 0 {
 			key := machineKey(entry.config)
 			entry.controller.machinePrimary.Store(!primaries[key])
 			primaries[key] = true
@@ -129,7 +136,7 @@ func (n *Node) tryPendingLocked() {
 		}
 		controller := NewController(n.core, p, &c.Options)
 		key := machineKey(c)
-		controller.machinePrimary.Store(c.ApiConfig.MachineID > 0 && !primaries[key])
+		controller.machinePrimary.Store(c.ApiConfig.Cluster == nil && c.ApiConfig.MachineID > 0 && !primaries[key])
 		if err := startController(controller); err != nil {
 			if closeErr := closeController(controller); closeErr != nil {
 				log.WithError(closeErr).Warn("Clean up failed node")
@@ -244,7 +251,10 @@ func validateBindings(nodes []conf.NodeConfig) error {
 	seen := map[string]bool{}
 	machineModes := map[string]bool{}
 	for _, c := range nodes {
-		if c.ApiConfig.MachineID > 0 {
+		if err := c.ApiConfig.Cluster.Validate(); err != nil {
+			return err
+		}
+		if c.ApiConfig.Cluster == nil && c.ApiConfig.MachineID > 0 {
 			mode := c.ApiConfig.MachineAutoDiscover == nil || *c.ApiConfig.MachineAutoDiscover
 			key := machineKey(c)
 			if previous, ok := machineModes[key]; ok && previous != mode {

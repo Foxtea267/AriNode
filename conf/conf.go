@@ -69,7 +69,15 @@ func (p *Conf) LoadFromPath(filePath string) error {
 	if err := p.resolvePanels(); err != nil {
 		return err
 	}
-	return p.resolveKomari()
+	if err := p.resolveKomari(); err != nil {
+		return err
+	}
+	for i := range p.NodeConfig {
+		if err := p.NodeConfig[i].ApiConfig.Cluster.Validate(); err != nil {
+			return fmt.Errorf("Nodes[%d]: %w", i, err)
+		}
+	}
+	return nil
 }
 
 func (p *Conf) resolveCores() error {

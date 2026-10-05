@@ -13,7 +13,7 @@ func (n *Node) discoverBindingsLocked() []conf.NodeConfig {
 	var machines []string
 	var desired []conf.NodeConfig
 	for _, c := range n.configured {
-		if c.ApiConfig.MachineID <= 0 || (c.ApiConfig.MachineAutoDiscover != nil && !*c.ApiConfig.MachineAutoDiscover) {
+		if c.ApiConfig.Cluster != nil || c.ApiConfig.MachineID <= 0 || (c.ApiConfig.MachineAutoDiscover != nil && !*c.ApiConfig.MachineAutoDiscover) {
 			desired = append(desired, c)
 			continue
 		}
@@ -34,13 +34,13 @@ func (n *Node) discoverBindingsLocked() []conf.NodeConfig {
 			log.WithFields(log.Fields{"panel": template.ApiConfig.APIHost, "machine_id": template.ApiConfig.MachineID}).WithError(err).Warn("Machine discovery failed; preserving existing nodes")
 			seen := map[string]bool{}
 			for _, c := range n.configured {
-				if machineKey(c) == key {
+				if c.ApiConfig.Cluster == nil && machineKey(c) == key {
 					desired = append(desired, c)
 					seen[bindingKey(c)] = true
 				}
 			}
 			for _, entry := range n.entries {
-				if machineKey(entry.config) == key && !seen[bindingKey(entry.config)] {
+				if entry.config.ApiConfig.Cluster == nil && machineKey(entry.config) == key && !seen[bindingKey(entry.config)] {
 					desired = append(desired, entry.config)
 				}
 			}
@@ -48,14 +48,19 @@ func (n *Node) discoverBindingsLocked() []conf.NodeConfig {
 		}
 		for _, binding := range bindings {
 			c := template
+			cluster := false
 			c.ApiConfig.NodeID, c.ApiConfig.NodeType = binding.ID, binding.Type
 			c.Options.Name = ""
 			for _, explicit := range n.configured {
 				if machineKey(explicit) == key && explicit.ApiConfig.NodeID == binding.ID {
+					cluster = explicit.ApiConfig.Cluster != nil
 					c = explicit
 					c.ApiConfig.NodeType = binding.Type
 					break
 				}
+			}
+			if cluster {
+				continue // Explicit shared nodes were already added above.
 			}
 			desired = append(desired, c)
 		}

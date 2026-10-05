@@ -92,3 +92,23 @@ func TestMachineDiscoveryPreservesHealthyNodesAcrossUpdatesAndFailures(t *testin
 		t.Fatal("empty machine lost its discovery template")
 	}
 }
+
+func TestClusterDiscoveryOnlyStartsExplicitSharedNode(t *testing.T) {
+	var calls atomic.Int32
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		fmt.Fprint(w, `{"nodes":[{"id":1,"type":"vless"},{"id":2,"type":"vless"}]}`)
+	}))
+	defer s.Close()
+	shared := testConfig(s.URL, "vless", 1, 22)
+	shared.ApiConfig.Cluster = &conf.ClusterConfig{Domain: "pool.example.com", MemberID: "hk-01"}
+	n := New()
+	n.configured = []conf.NodeConfig{shared}
+	if bindings := n.discoverBindingsLocked(); len(bindings) != 1 || calls.Load() != 0 {
+		t.Fatal("shared node discovered unrelated machine bindings")
+	}
+	n.configured = append(n.configured, testConfig(s.URL, "vless", 2, 22))
+	if bindings := n.discoverBindingsLocked(); len(bindings) != 2 || bindings[0].ApiConfig.Cluster == nil || bindings[1].ApiConfig.Cluster != nil {
+		t.Fatal("mixed bindings duplicated or changed the shared node")
+	}
+}

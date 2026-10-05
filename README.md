@@ -80,6 +80,10 @@ Upload [`dist/arinode-komari-plugin.zip`](dist/arinode-komari-plugin.zip) throug
 
 The status API returns the service start time, per-node states and Komari reporting states. It does not expose panel credentials. `/healthz` provides a simple local readiness check.
 
+## Multiple servers sharing one node
+
+Run the same Xboard node ID on multiple AriNode servers and point its hostname at multiple A/AAAA records. Add `Cluster: {"Domain":"pool.example.com","MemberID":"hk-01"}` to that node on each server, using a different member ID per host. Update and enable **Xboard plugin 0.2.0 first** to merge traffic, devices and host metrics, and generate individual replica configs. See the [deployment guide](docs/node-cluster.md) and [example](example/node-cluster.config.json). DNS and clients select a backend; distribution is not CPU weighted and failed IPs are not removed automatically. Device counts are eventually synchronized, and speed limits apply per server.
+
 ## Multiple Xboard and Komari bindings
 
 Omitted `Cores`, core `Type`, or node `Core` defaults to sing-box. `sing`, `singbox`, and `sing-box` are accepted aliases for `sing`. An explicit `CoreName` selects its named core; other cores require explicit configuration and node selection. The status API includes each running node's active core and listening port. Panel reports alone do not verify client connectivity.

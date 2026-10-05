@@ -17,6 +17,8 @@ import (
 // Panel is the interface for different panel's api.
 
 type Client struct {
+	Cluster          *conf.ClusterConfig
+	AliveIPs         map[int][]string
 	client           *resty.Client
 	APIHost          string
 	APISendIP        string
@@ -32,6 +34,9 @@ type Client struct {
 }
 
 func New(c *conf.ApiConfig) (*Client, error) {
+	if err := c.Cluster.Validate(); err != nil {
+		return nil, err
+	}
 	var client *resty.Client
 	if c.APISendIP != "" {
 		client = resty.NewWithLocalAddr(&net.TCPAddr{
@@ -82,6 +87,7 @@ func New(c *conf.ApiConfig) (*Client, error) {
 	}
 	client.SetQueryParams(params)
 	return &Client{
+		Cluster:   c.Cluster,
 		client:    client,
 		Token:     c.Key,
 		APIHost:   c.APIHost,

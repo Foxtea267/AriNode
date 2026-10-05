@@ -178,7 +178,11 @@ func setupFresh(zh, interactive bool) error {
 		return err
 	}
 	tmpConfig := filepath.Join(staging, "config.json")
-	if err := writeInitialConfig(panel, token, core, tmpConfig, strings.Fields(nodes), machineID, false); err != nil {
+	cluster, err := clusterValues(os.Getenv("ARINODE_CLUSTER_DOMAIN"), os.Getenv("ARINODE_CLUSTER_MEMBER"))
+	if err != nil {
+		return err
+	}
+	if err := writeInitialConfigWithCluster(panel, token, core, tmpConfig, strings.Fields(nodes), machineID, false, cluster); err != nil {
 		return err
 	}
 	data, err := os.ReadFile(tmpConfig)

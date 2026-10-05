@@ -35,6 +35,29 @@ func TestWriteInitialConfig(t *testing.T) {
 	}
 }
 
+func TestWriteClusterConfigKeepsSharedNodeAndUniqueMember(t *testing.T) {
+	for _, member := range []string{"hk-01", "hk-02"} {
+		path := filepath.Join(t.TempDir(), "config.json")
+		cluster, err := clusterValues("pool.example.com", member)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := writeInitialConfigWithCluster("https://panel.example.com", "shared", "sing", path, []string{"mieru:7"}, 22, false, cluster); err != nil {
+			t.Fatal(err)
+		}
+		data, _ := os.ReadFile(path)
+		var config struct {
+			Nodes []struct {
+				NodeID  int
+				Cluster struct{ Domain, MemberID string }
+			}
+		}
+		if json.Unmarshal(data, &config) != nil || config.Nodes[0].NodeID != 7 || config.Nodes[0].Cluster.MemberID != member {
+			t.Fatal("replica identity not generated")
+		}
+	}
+}
+
 func TestWriteInitialConfigRejectsInvalidBindings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	for _, nodes := range [][]string{{"vless:0"}, {"vless:1", "vless:1"}, {"invalid:1"}} {

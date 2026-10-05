@@ -22,6 +22,8 @@ func Init() {
 }
 
 type Limiter struct {
+	aliveMu       sync.RWMutex
+	aliveIPs      map[int]map[string]bool
 	ruleMu        sync.RWMutex
 	DomainRules   []*regexp.Regexp
 	IPRules       []netip.Prefix
@@ -96,7 +98,10 @@ func (l *Limiter) UpdateUser(tag string, added []panel.UserInfo, deleted []panel
 		l.UserOnlineIP.Delete(format.UserTag(tag, deleted[i].Uuid))
 		l.SpeedLimiter.Delete(format.UserTag(tag, deleted[i].Uuid))
 		delete(l.UUIDtoUID, deleted[i].Uuid)
+		l.aliveMu.Lock()
 		delete(l.AliveList, deleted[i].Id)
+		delete(l.aliveIPs, deleted[i].Id)
+		l.aliveMu.Unlock()
 	}
 	for i := range added {
 		userLimit := &UserLimitInfo{
@@ -157,7 +162,9 @@ func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool
 		// Store online user for device limit
 		newipMap := new(sync.Map)
 		newipMap.Store(ip, uid)
-		aliveIp := l.AliveList[uid]
+		l.aliveMu.RLock()
+		aliveIp, knownIP := l.AliveList[uid], l.aliveIPs[uid][ip]
+		l.aliveMu.RUnlock()
 		// If any device is online
 		if v, loaded := l.UserOnlineIP.LoadOrStore(taguuid, newipMap); loaded {
 			oldipMap := v.(*sync.Map)
@@ -167,7 +174,7 @@ func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool
 					if v.(int) == uid {
 						l.OldUserOnline.Delete(ip)
 					}
-				} else if deviceLimit > 0 {
+				} else if deviceLimit > 0 && !knownIP {
 					if deviceLimit <= aliveIp {
 						oldipMap.Delete(ip)
 						return nil, true
@@ -179,7 +186,7 @@ func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool
 				l.OldUserOnline.Delete(ip)
 			}
 		} else {
-			if deviceLimit > 0 {
+			if deviceLimit > 0 && !knownIP {
 				if deviceLimit <= aliveIp {
 					l.UserOnlineIP.Delete(taguuid)
 					return nil, true

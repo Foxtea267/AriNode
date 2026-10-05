@@ -21,6 +21,9 @@ class ProvisionController extends PluginController
             'node_ids.*' => 'required|integer|min:1|distinct',
             'core' => 'sometimes|in:sing,xray',
             'machine_id' => 'sometimes|integer|min:1',
+            'cluster_domain' => 'required_with:cluster_members|string|max:253',
+            'cluster_members' => 'sometimes|array|min:2|max:128',
+            'cluster_members.*' => ['required', 'string', 'distinct', 'regex:/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/'],
         ]);
 
         $ids = $params['node_ids'];
@@ -45,6 +48,7 @@ class ProvisionController extends PluginController
         $panelUrl = rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
         $core = $params['core'] ?? 'sing';
         $nodes = [];
+        $clusterDomain = strtolower(rtrim(trim($params['cluster_domain'] ?? ''), '.'));
         foreach ($ids as $id) {
             $server = $servers->get($id);
             $type = Server::normalizeType($server->type);
@@ -60,6 +64,9 @@ class ProvisionController extends PluginController
             if (!$server->enabled) {
                 return response()->json(['message' => "Node {$id} is disabled"], 422);
             }
+            if (!empty($params['cluster_members']) && strtolower(rtrim($server->host, '.')) !== $clusterDomain) {
+                return response()->json(['message' => "Node {$id} host must match cluster_domain"], 422);
+            }
             if ($machine && (int) $server->machine_id !== (int) $machine->id) {
                 return response()->json(['message' => "Node {$id} is not bound to machine {$machine->id}"], 422);
             }
@@ -74,10 +81,24 @@ class ProvisionController extends PluginController
             ];
         }
 
-        return response()->json([
+        $config = [
             'Log' => ['Level' => 'info'],
             'Cores' => [['Type' => $core]],
             'Nodes' => $nodes,
-        ])->header('Cache-Control', 'no-store');
+        ];
+        if (!empty($params['cluster_members'])) {
+            $replicas = [];
+            foreach ($params['cluster_members'] as $member) {
+                $replica = $config;
+                foreach ($replica['Nodes'] as &$binding) {
+                    $binding['Cluster'] = ['Domain' => $clusterDomain, 'MemberID' => $member];
+                }
+                unset($binding);
+                $replicas[] = ['member_id' => $member, 'config' => $replica];
+            }
+            return response()->json(['domain' => $clusterDomain, 'replicas' => $replicas])
+                ->header('Cache-Control', 'no-store');
+        }
+        return response()->json($config)->header('Cache-Control', 'no-store');
     }
 }

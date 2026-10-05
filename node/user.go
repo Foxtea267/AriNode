@@ -7,6 +7,9 @@ import (
 )
 
 func (c *Controller) reportUserTrafficTask() (err error) {
+	if c.apiClient.Cluster != nil {
+		return c.reportClusterTask()
+	}
 	if status, statusErr := sysstatus.Read(); statusErr == nil {
 		if reportErr := c.apiClient.ReportStatus(status); reportErr != nil {
 			log.WithError(reportErr).WithField("tag", c.tag).Warn("Report host status failed")

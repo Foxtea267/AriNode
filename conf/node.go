@@ -26,15 +26,16 @@ type rawNodeConfig struct {
 }
 
 type ApiConfig struct {
-	APIHost             string `json:"ApiHost"`
-	APISendIP           string `json:"ApiSendIP"`
-	NodeID              int    `json:"NodeID"`
-	MachineID           int    `json:"MachineID,omitempty"`
-	MachineAutoDiscover *bool  `json:"MachineAutoDiscover,omitempty"`
-	Key                 string `json:"ApiKey"`
-	NodeType            string `json:"NodeType"`
-	Timeout             int    `json:"Timeout"`
-	RuleListPath        string `json:"RuleListPath"`
+	Cluster             *ClusterConfig `json:"Cluster,omitempty"`
+	APIHost             string         `json:"ApiHost"`
+	APISendIP           string         `json:"ApiSendIP"`
+	NodeID              int            `json:"NodeID"`
+	MachineID           int            `json:"MachineID,omitempty"`
+	MachineAutoDiscover *bool          `json:"MachineAutoDiscover,omitempty"`
+	Key                 string         `json:"ApiKey"`
+	NodeType            string         `json:"NodeType"`
+	Timeout             int            `json:"Timeout"`
+	RuleListPath        string         `json:"RuleListPath"`
 }
 
 func (n *NodeConfig) UnmarshalJSON(data []byte) (err error) {

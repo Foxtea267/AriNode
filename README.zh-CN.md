@@ -33,6 +33,10 @@ ARINODE_PANEL_TOKEN='XBOARD_TOKEN' ./anctl init --panel https://panel.example.co
 
 机器模式将 `ARINODE_PANEL_TOKEN` 设为机器 token，并在 `init` 后加 `--machine-id 3`。配置文件包含密钥，勿提交到版本库。
 
+## 多服务器均衡负载组一个节点
+
+支持多台 AriNode 共用同一 Xboard 节点 ID，节点地址填写一个解析到多个 IP 的域名。每台服务器在节点条目配置 `Cluster: {"Domain":"pool.example.com","MemberID":"hk-01"}`，成员 ID 各不相同。**先更新并启用 Xboard 插件 0.2.0**，它负责合并流量、在线设备和主机资源，支持批量生成成员配置。部署命令、DNS 记录、证书及统计边界见[节点组说明](docs/node-cluster.md)和[配置示例](example/node-cluster.config.json)。DNS/客户端决定分流，当前不按 CPU 调度，也不自动删除故障 IP。
+
 ## 多节点隔离与多面板绑定
 
 未填写 `Cores`、内核 `Type` 或节点 `Core` 时，默认使用 sing-box；`sing`、`singbox`、`sing-box` 均可填写，内部统一为 `sing`。指定 `CoreName` 时使用对应的命名内核。选择其他内核时需显式配置该内核及节点绑定。状态接口 `/v1/status` 会显示节点实际使用的 `core` 和监听端口 `port`；面板能收到上报仍需结合客户端连接验证代理可用性。
