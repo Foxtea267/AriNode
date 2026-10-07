@@ -1,6 +1,7 @@
 package node
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -82,17 +83,22 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 		c.limiter.SetAliveList(newA, c.apiClient.AliveIPs)
 		c.aliveMap = newA
 	}
-	newN := c.pendingNode
-	if newN == nil {
-		newN, err = c.apiClient.GetNodeInfo()
-	}
+	newN, err := c.apiClient.GetNodeInfo()
 	if err != nil {
+		c.configError.Store(true)
 		log.WithError(err).WithField("tag", c.tag).Error("Get node info failed; user authorization already synchronized")
 		return nil
+	}
+	if newN == nil {
+		newN = c.pendingNode
+		if newN == nil {
+			c.configError.Store(false)
+		}
 	}
 	if newN != nil {
 		c.pendingNode = newN
 		if err := c.reloadNode(newN, nil, newA); err != nil {
+			c.configError.Store(true)
 			log.WithError(err).WithField("tag", c.tag).Error("Node reload failed; will retry")
 		}
 	}
@@ -161,8 +167,27 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 		alive = c.aliveMap
 	}
 	probe := &limiter.Limiter{}
-	if err := probe.UpdateRule(&next.Rules); err != nil {
+	if err := probe.UpdateRule(next.LimiterRules()); err != nil {
 		return fmt.Errorf("validate rule: %w", err)
+	}
+	if c.coreAdded && panel.InboundConfigEqual(c.info, next) {
+		if updater, ok := c.server.(vCore.NodePolicyUpdater); ok {
+			err := updater.UpdateNodePolicy(c.tag, next, c.Options)
+			if err == nil {
+				if err := c.limiter.UpdateRule(next.LimiterRules()); err != nil {
+					return err
+				}
+				c.info = next
+				c.pendingNode = nil
+				c.configError.Store(false)
+				c.updateNodeIntervals(next)
+				log.WithField("node", c.tag).Info("Panel routing updated without restarting inbound")
+				return nil
+			}
+			if !errors.Is(err, vCore.ErrPolicyReloadUnsupported) {
+				return err
+			}
+		}
 	}
 	if next.Security == panel.Tls {
 		if err := c.requestCert(); err != nil {
@@ -209,20 +234,25 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 	}
 	c.limiter = limiter.AddLimiter(newTag, &c.LimitConfig, users, alive)
 	c.limiter.SetAliveList(alive, c.apiClient.AliveIPs)
-	if err := c.limiter.UpdateRule(&next.Rules); err != nil {
+	if err := c.limiter.UpdateRule(next.LimiterRules()); err != nil {
 		return fmt.Errorf("update rule: %w", err)
 	}
 	c.tag, c.info, c.userList, c.aliveMap = newTag, next, users, alive
 	c.pendingNode = nil
+	c.configError.Store(false)
 	c.traffic = make(map[string]int64)
+	c.updateNodeIntervals(next)
+	log.WithField("tag", c.tag).Infof("Node reloaded with %d users", len(users))
+	return nil
+}
+
+func (c *Controller) updateNodeIntervals(next *panel.NodeInfo) {
 	if c.nodeInfoMonitorPeriodic != nil && next.PullInterval > 0 {
 		_ = c.nodeInfoMonitorPeriodic.SetInterval(authorizationInterval(next.PullInterval))
 	}
 	if c.userReportPeriodic != nil && next.PushInterval > 0 {
 		_ = c.userReportPeriodic.SetInterval(next.PushInterval)
 	}
-	log.WithField("tag", c.tag).Infof("Node reloaded with %d users", len(users))
-	return nil
 }
 
 func (c *Controller) SpeedChecker() error {

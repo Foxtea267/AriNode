@@ -201,6 +201,9 @@ func TestAllSingProtocolsAuthenticatedForwarding(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
+			if tc.protocol != "hysteria" {
+				verifyPanelOutbound(t, server, tc.name+"-panel", tc.protocol, uuid, out)
+			}
 			if !tc.udp {
 				return
 			}

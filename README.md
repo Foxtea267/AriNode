@@ -18,6 +18,12 @@ Run `sudo anctl bash` to reopen the language and deployment menu. Use `anctl sta
 
 ## Quick start
 
+### XBoard custom outbounds, routes and multiplex
+
+AriNode applies panel `custom_outbounds`, native `custom_routes`, structured `custom_route_rules`, ordinary `routes` forwarding (`action: "proxy"`, `action_value: "sg01"`) and `multiplex` to the running Xray/sing-box kernels. Outbounds and route references are isolated per node, including proxy chains. Routing-only edits update automatically without restarting the inbound or shared Core; multiplex edits reload only the affected node. Local `OutboundConfigPath`, `RouteConfigPath`, `OriginalPath` and `MultiplexConfig` remain supported.
+
+See the [complete HK01 → SG01 routing example, precedence, protocol matrix and verification guide](docs/xboard-routing.md). sing-box server mux applies enabled/padding/brutal; protocol and connection/stream counts are client/outbound settings. Xray server mux needs no equivalent inbound fields. The pinned sing-box build has no Naive outbound and rejects it explicitly; Mieru custom outbounds use the existing SDK.
+
 Xboard `block` matches accept plain domains and `*.example.com` (the domain and its subdomains), IP/CIDR, and the `domain:`, `full:`, `keyword:`, `regexp:` and `protocol:` prefixes. Plain domains match a domain suffix; regexps require `regexp:`. Rule updates are validated before replacing active rules. If an older version reports `invalid domain rule` with a retrying node and no proxy listener, run `sudo anctl upgrade`.
 
 1. In Xboard, create and enable the nodes. Note each node's ID and the global server token under server settings.

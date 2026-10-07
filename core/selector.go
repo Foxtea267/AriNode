@@ -174,6 +174,30 @@ func (s *Selector) NodeCore(tag string) string {
 	return ""
 }
 
+func (s *Selector) UpdateNodePolicy(tag string, info *panel.NodeInfo, options *conf.Options) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("node %s: kernel rejected policy (panic payload omitted)", tag)
+		}
+	}()
+	bound, ok := s.nodes.Load(tag)
+	if !ok {
+		return ErrPolicyReloadUnsupported
+	}
+	configured := bound.(Core)
+	updater, ok := configured.(NodePolicyUpdater)
+	if !ok {
+		return ErrPolicyReloadUnsupported
+	}
+	resolved := *options
+	if resolved.Core != configured.Type() {
+		if err := resolved.UseCore(configured.Type()); err != nil {
+			return err
+		}
+	}
+	return updater.UpdateNodePolicy(tag, info, &resolved)
+}
+
 func (s *Selector) xhttpCore() (Core, error) {
 	if configured := s.cores["xray"]; configured != nil && configured.Type() == "xray" {
 		return configured, nil

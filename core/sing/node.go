@@ -111,16 +111,24 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 		TCPFastOpen: c.SingOptions.TCPFastOpen,
 	}
 	var multiplex *option.InboundMultiplexOptions
-	if c.SingOptions.Multiplex != nil {
+	mux := c.SingOptions.Multiplex
+	if info.Common.Multiplex != nil {
+		mux = info.Common.Multiplex
+	}
+	if err := mux.Validate(); err != nil {
+		return option.Inbound{}, err
+	}
+	if mux != nil {
 		multiplexOption := option.InboundMultiplexOptions{
-			Enabled: c.SingOptions.Multiplex.Enabled,
-			Padding: c.SingOptions.Multiplex.Padding,
-			Brutal: &option.BrutalOptions{
-				Enabled:  c.SingOptions.Multiplex.Brutal.Enabled,
-				UpMbps:   c.SingOptions.Multiplex.Brutal.UpMbps,
-				DownMbps: c.SingOptions.Multiplex.Brutal.DownMbps,
-			},
+			Enabled: mux.Enabled,
+			Padding: mux.Padding,
 		}
+		if mux.Brutal != nil {
+			multiplexOption.Brutal = &option.BrutalOptions{Enabled: mux.Brutal.Enabled, UpMbps: mux.Brutal.UpMbps, DownMbps: mux.Brutal.DownMbps}
+		}
+		// Protocol and stream/connection counts are outbound/client negotiation
+		// settings. This pinned server API auto-detects mux protocols and exposes
+		// only Enabled, Padding and Brutal; do not invent inbound JSON fields.
 		multiplex = &multiplexOption
 	}
 	var tls option.InboundTLSOptions
@@ -480,17 +488,23 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 }
 
 func (b *Sing) AddNode(tag string, info *panel.NodeInfo, config *conf.Options) error {
-	b.users.mapLock.Lock()
-	b.nodeReportMinTrafficBytes[tag] = config.ReportMinTraffic * 1024
-	b.users.mapLock.Unlock()
+	b.policyMu.Lock()
+	defer b.policyMu.Unlock()
+	if b.nodeRouters[tag] != nil {
+		return fmt.Errorf("node %s: inbound already exists", tag)
+	}
 	c, err := getInboundOptions(tag, info, config)
 	if err != nil {
+		return err
+	}
+	wrapper := &nodeRouter{Router: b.router}
+	if err := b.updatePolicyLocked(tag, info, config, wrapper); err != nil {
 		return err
 	}
 	in := b.box.Inbound()
 	err = in.Create(
 		b.ctx,
-		b.box.Router(),
+		wrapper,
 		b.logFactory.NewLogger(F.ToString("inbound/", c.Type, "[", tag, "]")),
 		tag,
 		c.Type,
@@ -498,16 +512,27 @@ func (b *Sing) AddNode(tag string, info *panel.NodeInfo, config *conf.Options) e
 	)
 
 	if err != nil {
+		wrapper.swap(nil)
 		return fmt.Errorf("add inbound error: %s", err)
 	}
+	b.users.mapLock.Lock()
+	b.nodeReportMinTrafficBytes[tag] = config.ReportMinTraffic * 1024
+	b.users.mapLock.Unlock()
+	b.nodeRouters[tag] = wrapper
 	return nil
 }
 
 func (b *Sing) DelNode(tag string) error {
+	b.policyMu.Lock()
+	defer b.policyMu.Unlock()
 	in := b.box.Inbound()
 	err := in.Remove(tag)
 	if err != nil {
 		return fmt.Errorf("delete inbound error: %s", err)
+	}
+	if r := b.nodeRouters[tag]; r != nil {
+		r.shutdown()
+		delete(b.nodeRouters, tag)
 	}
 	b.users.mapLock.Lock()
 	delete(b.users.uidMap, tag)

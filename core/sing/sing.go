@@ -14,6 +14,7 @@ import (
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/inbound"
+	"github.com/sagernet/sing-box/adapter/outbound"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
@@ -26,6 +27,13 @@ type DNSConfig struct {
 }
 
 type Sing struct {
+	lifecycleMu               sync.Mutex
+	closing                   bool
+	policyMu                  sync.Mutex
+	policyGeneration          uint64
+	nodeRouters               map[string]*nodeRouter
+	localRules                []option.Rule
+	localFinal                string
 	box                       *box.Box
 	ctx                       context.Context
 	hookServer                *HookServer
@@ -49,7 +57,9 @@ func New(c *conf.CoreConfig) (vCore.Core, error) {
 	registry := include.InboundRegistry()
 	inbound.Register[mieruInboundOptions](registry, "mieru", newMieruInbound)
 	inbound.Register[option.AnyTLSInboundOptions](registry, "anytls", newAnyTLSInbound)
-	ctx = box.Context(ctx, registry, include.OutboundRegistry(), include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
+	outboundRegistry := include.OutboundRegistry()
+	outbound.Register[mieruOutboundOptions](outboundRegistry, "mieru", newMieruOutbound)
+	ctx = box.Context(ctx, registry, outboundRegistry, include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
 	options := option.Options{}
 	if len(c.SingConfig.OriginalPath) != 0 {
 		data, err := os.ReadFile(c.SingConfig.OriginalPath)
@@ -88,6 +98,19 @@ func New(c *conf.CoreConfig) (vCore.Core, error) {
 	}
 	b.Router().AppendTracker(hs)
 	return &Sing{
+		nodeRouters: make(map[string]*nodeRouter),
+		localRules: func() []option.Rule {
+			if options.Route != nil {
+				return options.Route.Rules
+			}
+			return nil
+		}(),
+		localFinal: func() string {
+			if options.Route != nil {
+				return options.Route.Final
+			}
+			return ""
+		}(),
 		ctx:        b.Router().GetCtx(),
 		box:        b,
 		hookServer: hs,
@@ -105,6 +128,15 @@ func (b *Sing) Start() error {
 }
 
 func (b *Sing) Close() error {
+	b.policyMu.Lock()
+	b.lifecycleMu.Lock()
+	b.closing = true
+	b.lifecycleMu.Unlock()
+	for tag, r := range b.nodeRouters {
+		r.shutdown()
+		delete(b.nodeRouters, tag)
+	}
+	defer b.policyMu.Unlock()
 	return b.box.Close()
 }
 

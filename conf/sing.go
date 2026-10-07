@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"github.com/Foxtea267/AriNode/common/nodepolicy"
 	"github.com/sagernet/sing-box/option"
 )
 
@@ -58,17 +59,8 @@ type FallBack struct {
 	ServerPort string `json:"ServerPort"`
 }
 
-type MultiplexConfig struct {
-	Enabled bool          `json:"Enable"`
-	Padding bool          `json:"Padding"`
-	Brutal  BrutalOptions `json:"Brutal"`
-}
-
-type BrutalOptions struct {
-	Enabled  bool `json:"Enable"`
-	UpMbps   int  `json:"UpMbps"`
-	DownMbps int  `json:"DownMbps"`
-}
+type MultiplexConfig = nodepolicy.MultiplexConfig
+type BrutalOptions = nodepolicy.BrutalConfig
 
 func NewSingOptions() *SingOptions {
 	return &SingOptions{

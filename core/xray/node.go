@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/conf"
+	"github.com/Foxtea267/AriNode/core/xray/app/dispatcher"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/outbound"
@@ -18,6 +20,13 @@ type DNSConfig struct {
 }
 
 func (c *Xray) AddNode(tag string, info *panel.NodeInfo, config *conf.Options) error {
+	c.access.Lock()
+	defer c.access.Unlock()
+	if info.RoutingEnabled() {
+		if _, err := compilePolicy(tag, "validate", info, config); err != nil {
+			return fmt.Errorf("node %s: %w", tag, err)
+		}
+	}
 	c.nodeReportMinTrafficBytes[tag] = config.ReportMinTraffic * 1024
 	err := updateDNSConfig(info)
 	if err != nil {
@@ -41,6 +50,11 @@ func (c *Xray) AddNode(tag string, info *panel.NodeInfo, config *conf.Options) e
 		_ = c.removeInbound(tag)
 		return fmt.Errorf("add outbound error: %s", err)
 	}
+	if err := c.updatePolicyLocked(tag, info, config); err != nil {
+		_ = c.removeInbound(tag)
+		_ = c.removeOutbound(tag)
+		return err
+	}
 	return nil
 }
 
@@ -54,6 +68,7 @@ func (c *Xray) addInbound(config *core.InboundHandlerConfig) error {
 		return fmt.Errorf("not an InboundHandler: %s", err)
 	}
 	if err := c.ihm.AddHandler(context.Background(), handler); err != nil {
+		_ = handler.Close()
 		return err
 	}
 	return nil
@@ -69,14 +84,30 @@ func (c *Xray) addOutbound(config *core.OutboundHandlerConfig) error {
 		return fmt.Errorf("not an InboundHandler: %s", err)
 	}
 	if err := c.ohm.AddHandler(context.Background(), handler); err != nil {
+		_ = handler.Close()
 		return err
 	}
 	return nil
 }
 
 func (c *Xray) DelNode(tag string) error {
+	c.access.Lock()
+	defer c.access.Unlock()
 	inErr := c.removeInbound(tag)
+	c.users.mapLock.Lock()
+	for user := range c.users.uidMap {
+		if strings.HasPrefix(user, tag+"|") {
+			delete(c.users.uidMap, user)
+			if v, ok := c.dispatcher.LinkManagers.LoadAndDelete(user); ok {
+				v.(*dispatcher.LinkManager).CloseAll()
+			}
+		}
+	}
+	c.users.mapLock.Unlock()
+	c.dispatcher.SetNodePolicy(tag, nil)
 	outErr := c.removeOutbound(tag)
+	delete(c.nodeReportMinTrafficBytes, tag)
+	c.dispatcher.Counter.Delete(tag)
 	return errors.Join(inErr, outErr)
 }
 

@@ -189,6 +189,10 @@ func (n *Node) publishLocked() {
 	status := make([]BindingStatus, len(n.entries))
 	for i, entry := range n.entries {
 		status[i] = entry.status
+		if entry.controller != nil && entry.controller.configError.Load() {
+			status[i].State = "retrying"
+			status[i].Error = "Panel configuration update failed; retaining last valid node configuration"
+		}
 		if reporter, ok := n.core.(interface{ NodeCore(string) string }); ok && entry.controller != nil {
 			status[i].Core = reporter.NodeCore(entry.runtimeTag)
 		}

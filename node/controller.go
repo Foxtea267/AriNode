@@ -19,6 +19,7 @@ type Controller struct {
 	server                    vCore.Core
 	apiClient                 *panel.Client
 	machinePrimary            atomic.Bool
+	configError               atomic.Bool
 	tag                       string
 	limiter                   *limiter.Limiter
 	traffic                   map[string]int64
@@ -77,7 +78,7 @@ func (c *Controller) Start() error {
 	// add limiter
 	l := limiter.AddLimiter(c.tag, &c.LimitConfig, c.userList, c.aliveMap)
 	// add rule limiter
-	if err = l.UpdateRule(&node.Rules); err != nil {
+	if err = l.UpdateRule(node.LimiterRules()); err != nil {
 		return fmt.Errorf("update rule error: %s", err)
 	}
 	c.limiter = l

@@ -58,6 +58,11 @@ func (c *Xray) DelUsers(users []panel.UserInfo, tag string, _ *panel.NodeInfo) e
 }
 
 func (x *Xray) GetUserTrafficSlice(tag string, reset bool) ([]panel.UserTraffic, error) {
+	x.access.Lock()
+	defer x.access.Unlock()
+	if x.dispatcher == nil {
+		return nil, fmt.Errorf("Xray is not running")
+	}
 	trafficSlice := make([]panel.UserTraffic, 0)
 	x.users.mapLock.RLock()
 	defer x.users.mapLock.RUnlock()

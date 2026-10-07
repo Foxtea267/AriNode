@@ -1,5 +1,11 @@
 # AriNode
 
+## XBoard 面板分流与多路复用
+
+支持面板 `custom_outbounds`、原生 `custom_routes`、结构化 `custom_route_rules`、普通路由的转发动作 `proxy`（`action_value` 为 outbound tag），以及 `multiplex`。配置真正注册到运行中的 Xray/sing-box；每个节点有独立出口命名空间，支持代理链，重复的 `sg01` 不会互相覆盖。路由/出口变化自动热更新并保留 inbound 和用户；mux 变化仅 reload 对应节点。本地 `OutboundConfigPath`、`RouteConfigPath`、`OriginalPath`、`MultiplexConfig` 继续保留。
+
+完整的 **HK01 接入 → Claude/OpenAI 经 SG01 → 其他流量 HK01 direct** 配置、优先级、协议范围和验收方法见 [XBoard 路由指南](docs/xboard-routing.md)。sing-box 服务端实际应用 mux 的 enabled/padding/brutal；protocol 和连接/流数属于客户端/outbound 参数。Xray 服务端无需对应 inbound 字段。当前固定版本没有 Naive outbound，会明确报错；Mieru outbound 已接入现有 SDK。
+
 AriNode 基于 V2bX 二次开发，保留 sing-box、Xray、Hysteria2 内核，并增加 Xboard 原生节点与机器认证、Komari 状态页面，以及 Linux TCP 调优入口。项目仓库为 [Foxtea267/AriNode](https://github.com/Foxtea267/AriNode)，上游来源与兼容边界见 [README.md](README.md)。
 
 ## 一键安装（Linux）

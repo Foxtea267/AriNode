@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/apernet/hysteria/core/v2/server"
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/conf"
+	"github.com/apernet/hysteria/core/v2/server"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -20,6 +20,9 @@ type Hysteria2node struct {
 }
 
 func (h *Hysteria2) AddNode(tag string, info *panel.NodeInfo, config *conf.Options) error {
+	if info.RoutingEnabled() {
+		return fmt.Errorf("node %s: panel routing requires the sing-box core for hysteria2", tag)
+	}
 	var err error
 	hyconfig := &server.Config{}
 	var c serverConfig

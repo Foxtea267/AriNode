@@ -5,6 +5,7 @@ package dispatcher
 import (
 	"context"
 	"fmt"
+	logger "github.com/sirupsen/logrus"
 	"regexp"
 	"strings"
 	"sync"
@@ -102,6 +103,8 @@ func (r *cachedReader) Interrupt() {
 
 // DefaultDispatcher is a default implementation of Dispatcher.
 type DefaultDispatcher struct {
+	nodePolicyMu sync.RWMutex
+	nodePolicies map[string]*NodePolicy
 	ohm          outbound.Manager
 	router       routing.Router
 	policy       policy.Manager
@@ -206,6 +209,13 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network) (*
 		managedWriter := &ManagedWriter{
 			writer:  uplinkWriter,
 			manager: lm,
+			abort: func() {
+				common.Close(downlinkWriter)
+				common.Interrupt(downlinkReader)
+				if sessionInbound.Conn != nil {
+					common.Close(sessionInbound.Conn)
+				}
+			},
 		}
 		lm.AddLink(managedWriter, outboundLink.Reader)
 		inboundLink.Writer = managedWriter
@@ -400,6 +410,11 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		managedWriter := &ManagedWriter{
 			writer:  outbound.Writer,
 			manager: lm,
+			abort: func() {
+				if sessionInbound.Conn != nil {
+					common.Close(sessionInbound.Conn)
+				}
+			},
 		}
 		outbound.Writer = managedWriter
 		if w != nil {
@@ -524,7 +539,14 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 	ob := outbounds[len(outbounds)-1]
 
 	sessionInbound := session.InboundFromContext(ctx)
-	if sessionInbound.User != nil {
+	var nodePolicy *NodePolicy
+	if sessionInbound != nil {
+		nodePolicy = d.acquireNodePolicy(sessionInbound.Tag)
+	}
+	if nodePolicy != nil {
+		defer nodePolicy.release()
+	}
+	if sessionInbound != nil && sessionInbound.User != nil && nodePolicy == nil {
 		if l == nil {
 			var err error
 			l, err = limiter.GetLimiter(sessionInbound.Tag)
@@ -601,6 +623,22 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 		}
 	}
 
+	if handler == nil && nodePolicy != nil {
+		if route, err := nodePolicy.Router.PickRoute(routingLink); err == nil {
+			handler = d.ohm.GetHandler(route.GetOutboundTag())
+			meta := nodePolicy.Logs[route.GetRuleTag()]
+			logger.WithFields(logger.Fields{"node": inTag, "route": meta.Name, "outbound": meta.Outbound}).Debug("Panel route selected")
+		}
+		if handler == nil {
+			errors.LogError(ctx, "node policy selected no available outbound: ", inTag)
+			common.Close(link.Writer)
+			common.Interrupt(link.Reader)
+			return
+		}
+	}
+	if handler == nil {
+		handler = d.ohm.GetHandler(inTag)
+	}
 	if handler == nil {
 		handler = d.ohm.GetDefaultHandler()
 	}
@@ -614,6 +652,8 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 
 	ob.Tag = handler.Tag()
 	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
+		// Accounting keys remain private; access logs never expose UUID emails.
+		accessMessage.Email = ""
 		if tag := handler.Tag(); tag != "" {
 			if inTag == "" {
 				accessMessage.Detour = tag

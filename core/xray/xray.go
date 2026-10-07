@@ -30,7 +30,10 @@ func init() {
 
 // Xray Structure
 type Xray struct {
+	lifecycleMu               sync.Mutex
+	closing                   bool
 	access                    sync.Mutex
+	policyGeneration          uint64
 	Server                    *core.Instance
 	ihm                       inbound.Manager
 	ohm                       outbound.Manager
@@ -200,6 +203,9 @@ func (c *Xray) Start() error {
 func (c *Xray) Close() error {
 	c.access.Lock()
 	defer c.access.Unlock()
+	c.lifecycleMu.Lock()
+	c.closing = true
+	c.lifecycleMu.Unlock()
 	c.ihm = nil
 	c.ohm = nil
 	c.dispatcher = nil

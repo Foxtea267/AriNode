@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Foxtea267/AriNode/common/nodepolicy"
+
 	"encoding/json"
 )
 
@@ -28,6 +30,7 @@ type NodeInfo struct {
 	RawDNS       RawDNS
 	Rules        Rules
 	TLSSettings  NativeTLSSettings
+	Policy       nodepolicy.Policy
 
 	// origin
 	VAllss      *VAllssNode
@@ -48,11 +51,15 @@ type NativeTLSSettings struct {
 }
 
 type CommonNode struct {
-	Host       string      `json:"host"`
-	ServerPort int         `json:"server_port"`
-	ServerName string      `json:"server_name"`
-	Routes     []Route     `json:"routes"`
-	BaseConfig *BaseConfig `json:"base_config"`
+	CustomOutbounds  []nodepolicy.OutboundConfig  `json:"custom_outbounds,omitempty"`
+	CustomRoutes     []map[string]any             `json:"custom_routes,omitempty"`
+	CustomRouteRules []nodepolicy.CustomRouteRule `json:"custom_route_rules,omitempty"`
+	Multiplex        *nodepolicy.MultiplexConfig  `json:"multiplex,omitempty"`
+	Host             string                       `json:"host"`
+	ServerPort       int                          `json:"server_port"`
+	ServerName       string                       `json:"server_name"`
+	Routes           []Route                      `json:"routes"`
+	BaseConfig       *BaseConfig                  `json:"base_config"`
 }
 
 type Route struct {
@@ -416,6 +423,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 
 	// parse rules and dns
 	for i := range cm.Routes {
+		cm.Routes[i].Action = strings.ToLower(strings.TrimSpace(cm.Routes[i].Action))
 		matchs, err := routeMatches(cm.Routes[i].Match)
 		if err != nil {
 			return nil, fmt.Errorf("route %d: %w", cm.Routes[i].Id, err)
@@ -459,8 +467,14 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	node.PullInterval = intervalToTime(cm.BaseConfig.PullInterval)
 
 	node.Common = cm
+	node.Policy, err = node.PolicyConfig()
+	if err != nil {
+		return nil, fmt.Errorf("node %d: %w", node.Id, err)
+	}
+	if err := cm.Multiplex.Validate(); err != nil {
+		return nil, fmt.Errorf("node %d: %w", node.Id, err)
+	}
 	// clear
-	cm.Routes = nil
 	cm.BaseConfig = nil
 	c.responseBodyHash = newBodyHash
 	c.nodeEtag = r.Header().Get("ETag")
