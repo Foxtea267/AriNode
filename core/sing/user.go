@@ -22,6 +22,9 @@ func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
 	if !found {
 		return 0, errors.New("the inbound not found")
 	}
+	if upgraded, ok := in.(*httpUpgradeInbound); ok {
+		in = upgraded.Inbound
+	}
 	b.users.mapLock.Lock()
 	defer b.users.mapLock.Unlock()
 	switch p.NodeInfo.Type {
@@ -177,6 +180,9 @@ type UserDeleter interface {
 func (b *Sing) DelUsers(users []panel.UserInfo, tag string, info *panel.NodeInfo) error {
 	var del UserDeleter
 	if i, found := b.box.Inbound().Get(tag); found {
+		if upgraded, ok := i.(*httpUpgradeInbound); ok {
+			i = upgraded.Inbound
+		}
 		switch info.Type {
 		case "mieru":
 			del = i.(*mieruInbound)

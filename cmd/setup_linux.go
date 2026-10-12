@@ -56,18 +56,20 @@ func runSetupMenu() error {
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv("ARINODE_INSTALL_MODE")))
 	if mode == "" {
 		if !interactive {
-			return fmt.Errorf("set ARINODE_INSTALL_MODE=fresh, migrate or keep")
+			return fmt.Errorf("set ARINODE_INSTALL_MODE=fresh, migrate, migrate-v2bx or keep")
 		}
 		defaultMode, defaultChoice := "fresh", "1"
 		if _, err := os.Stat(xbnodeConfig); err == nil {
 			defaultMode, defaultChoice = "migrate", "2"
 		} else if _, err := os.Stat(setupConfig); err == nil {
 			defaultMode, defaultChoice = "keep", "3"
+		} else if _, err := os.Stat(v2bxConfig); err == nil {
+			defaultMode, defaultChoice = "migrate-v2bx", "4"
 		}
 		if zh {
-			fmt.Printf("部署方式: 1) 从零部署  2) 从现有 xbnode 迁移  3) 保留现有 AriNode 配置 [%s]: ", defaultChoice)
+			fmt.Printf("部署方式: 1) 从零部署  2) 从现有 xbnode 迁移  3) 保留现有 AriNode 配置  4) 迁移并卸载 V2bX [%s]: ", defaultChoice)
 		} else {
-			fmt.Printf("Deployment: 1) Fresh setup  2) Migrate existing xbnode  3) Keep AriNode config [%s]: ", defaultChoice)
+			fmt.Printf("Deployment: 1) Fresh setup  2) Migrate xbnode  3) Keep AriNode config  4) Migrate and uninstall V2bX [%s]: ", defaultChoice)
 		}
 		choice, err := setupReadLine()
 		if err != nil {
@@ -82,6 +84,8 @@ func runSetupMenu() error {
 			mode = "migrate"
 		case "3":
 			mode = "keep"
+		case "4":
+			mode = "migrate-v2bx"
 		default:
 			return fmt.Errorf("invalid deployment choice / 无效部署选项")
 		}
@@ -89,6 +93,8 @@ func runSetupMenu() error {
 	switch mode {
 	case "fresh":
 		return setupFresh(zh, interactive)
+	case "migrate-v2bx", "v2bx":
+		return migrateV2BXInstallation(v2bxPaths, v2bxMigrationOptions{From: true, Input: v2bxConfig, Output: setupConfig, Force: true, Domain: os.Getenv("ARINODE_CLUSTER_DOMAIN"), Member: os.Getenv("ARINODE_CLUSTER_MEMBER"), StatusURL: "http://127.0.0.1:18086/v1/status"})
 	case "migrate":
 		input := strings.TrimSpace(os.Getenv("ARINODE_XBNODE_CONFIG"))
 		if input == "" {
@@ -129,7 +135,7 @@ func runSetupMenu() error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("ARINODE_INSTALL_MODE must be fresh, migrate or keep")
+		return fmt.Errorf("ARINODE_INSTALL_MODE must be fresh, migrate, migrate-v2bx or keep")
 	}
 }
 

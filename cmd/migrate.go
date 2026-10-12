@@ -15,9 +15,10 @@ import (
 )
 
 func init() {
-	parent := &cobra.Command{Use: "migrate", Short: "Convert configurations between AriNode and Xboard-Node"}
+	parent := &cobra.Command{Use: "migrate", Short: "Migrate between AriNode, Xboard-Node and V2bX"}
 	parent.AddCommand(newMigrationCommand("from-xbnode", "/etc/xboard-node/config.yml", "/etc/arinode/config.json", true))
 	parent.AddCommand(newMigrationCommand("to-xbnode", "/etc/arinode/config.json", "/etc/xboard-node/config.yml", false))
+	parent.AddCommand(newV2BXMigrationCommand(true), newV2BXMigrationCommand(false))
 	command.AddCommand(parent)
 }
 

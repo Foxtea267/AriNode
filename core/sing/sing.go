@@ -55,6 +55,8 @@ func init() {
 func New(c *conf.CoreConfig) (vCore.Core, error) {
 	ctx := context.Background()
 	registry := include.InboundRegistry()
+	inbound.Register[option.VLESSInboundOptions](registry, "vless", newVLESSInbound)
+	inbound.Register[option.TrojanInboundOptions](registry, "trojan", newTrojanInbound)
 	inbound.Register[mieruInboundOptions](registry, "mieru", newMieruInbound)
 	inbound.Register[option.AnyTLSInboundOptions](registry, "anytls", newAnyTLSInbound)
 	outboundRegistry := include.OutboundRegistry()

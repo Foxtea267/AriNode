@@ -18,6 +18,10 @@ func TestClusterKnownDeviceCanSwitchReplicaAtLimit(t *testing.T) {
 	if _, rejected := l.CheckLimit(format.UserTag("group", "same"), "192.0.2.2", true, true); !rejected {
 		t.Fatal("new device bypassed aggregate limit")
 	}
+	// Local admissions expire through the reporting windows as well as the
+	// remote snapshot; an empty remote set cannot erase a just-admitted client.
+	l.GetOnlineDevice()
+	l.GetOnlineDevice()
 	l.SetAliveList(map[int]int{}, nil)
 	if _, rejected := l.CheckLimit(format.UserTag("group", "same"), "192.0.2.2", true, true); rejected {
 		t.Fatal("expired devices retained")

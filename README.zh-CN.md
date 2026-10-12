@@ -1,5 +1,13 @@
 # AriNode
 
+## V2bX 一键安装、迁移并卸载
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/install.sh | sudo bash -s -- --migrate-v2bx
+```
+
+已安装 AriNode：`sudo anctl migrate from-v2bx`；迁回：`sudo anctl migrate to-v2bx`。先保存原程序、配置、证书和资源，目标健康后才卸载原运行组件。四台共享节点时先安装 XBoard 插件 0.3.0，迁移命令加 `--cluster-domain 实际节点域名 --cluster-member hk-04`，每台 MemberID 不同。见 [迁移、回滚、兼容边界与四服务器说明](docs/v2bx-migration.md)。
+
 ## XBoard 面板分流与多路复用
 
 支持面板 `custom_outbounds`、原生 `custom_routes`、结构化 `custom_route_rules`、普通路由的转发动作 `proxy`（`action_value` 为 outbound tag），以及 `multiplex`。配置真正注册到运行中的 Xray/sing-box；每个节点有独立出口命名空间，支持代理链，重复的 `sg01` 不会互相覆盖。路由/出口变化自动热更新并保留 inbound 和用户；mux 变化仅 reload 对应节点。本地 `OutboundConfigPath`、`RouteConfigPath`、`OriginalPath`、`MultiplexConfig` 继续保留。

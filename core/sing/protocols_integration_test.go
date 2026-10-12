@@ -55,6 +55,7 @@ func TestAllSingProtocolsAuthenticatedForwarding(t *testing.T) {
 		{"vless-h2", "vless", "h2", "", false},
 		{"trojan-tls", "trojan", "tcp", "", true}, {"trojan-ws", "trojan", "ws", "", false},
 		{"trojan-grpc", "trojan", "grpc", "", false}, {"trojan-h2", "trojan", "h2", "", false},
+		{"trojan-httpupgrade", "trojan", "httpupgrade", "", true},
 		{"ss-classic", "shadowsocks", "", "aes-128-gcm", true}, {"ss-2022-128", "shadowsocks", "", "2022-blake3-aes-128-gcm", true}, {"ss-2022-256", "shadowsocks", "", "2022-blake3-aes-256-gcm", true},
 		{"ss-aes256", "shadowsocks", "", "aes-256-gcm", true}, {"ss-chacha20", "shadowsocks", "", "chacha20-ietf-poly1305", true},
 		{"hy1", "hysteria", "", "", true}, {"hy2", "hysteria2", "", "", true}, {"tuic", "tuic", "", "", true}, {"anytls", "anytls", "", "", true},

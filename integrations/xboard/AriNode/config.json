@@ -1,7 +1,7 @@
 {
   "name": "AriNode 节点下发",
   "code": "ari_node",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "下发 AriNode 节点配置，支持 DNS 多 IP 节点组与多服务器上报聚合",
   "author": "AriNode",
   "type": "feature",

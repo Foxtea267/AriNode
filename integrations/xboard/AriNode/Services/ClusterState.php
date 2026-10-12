@@ -5,6 +5,22 @@ namespace Plugin\AriNode\Services;
 /** Pure member snapshot merging; persistence and authorization stay in the controller. */
 final class ClusterState
 {
+    public static function canonicalIPs(array $users): array
+    {
+        foreach ($users as $uid => $addresses) {
+            $ips = [];
+            foreach ($addresses as $ip) {
+                $packed = inet_pton($ip);
+                if ($packed === false) { throw new \RuntimeException('Invalid device IP'); }
+                if (strlen($packed) === 16 && substr($packed, 0, 12) === str_repeat("\0", 10) . "\xff\xff") {
+                    $packed = substr($packed, 12);
+                }
+                $ips[] = inet_ntop($packed);
+            }
+            $users[$uid] = array_values(array_unique($ips));
+        }
+        return $users;
+    }
     public static function prune(array $state, int $now, int $ttl): array
     {
         $state['members'] ??= [];
@@ -24,7 +40,7 @@ final class ClusterState
         }
         $state['members'][$member] = [
             'seen_at' => $now,
-            'alive' => $alive,
+            'alive' => self::canonicalIPs($alive),
             'status' => $status ?? ($state['members'][$member]['status'] ?? null),
         ];
         return $state;
@@ -37,7 +53,7 @@ final class ClusterState
             'swap' => ['total' => 0, 'used' => 0], 'disk' => ['total' => 0, 'used' => 0]];
         $count = 0;
         foreach ($state['members'] ?? [] as $member) {
-            foreach ($member['alive'] as $uid => $ips) {
+            foreach (self::canonicalIPs($member['alive']) as $uid => $ips) {
                 $alive[$uid] = array_values(array_unique(array_merge($alive[$uid] ?? [], $ips)));
             }
             if (is_array($member['status'])) {

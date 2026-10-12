@@ -118,8 +118,8 @@ class ClusterController extends PluginController
             }
             $users = ServerService::getAvailableUsers($node)->where('device_limit', '>', 0);
             $devices = app(DeviceStateService::class);
-            return response()->json(['alive' => (object) $devices->getAliveList($users),
-                'ips' => (object) $devices->getUsersDevices($users->pluck('id')->all())]);
+            $ips = ClusterState::canonicalIPs($devices->getUsersDevices($users->pluck('id')->all()));
+            return response()->json(['alive' => (object) array_map('count', $ips), 'ips' => (object) $ips]);
         });
     }
 
@@ -132,6 +132,16 @@ class ClusterController extends PluginController
         $state = ClusterState::prune($state, time(), $this->ttl());
         return response()->json(['node_id' => $node->id, 'domain' => $node->host,
             'member_ttl' => $this->ttl(), 'members' => ClusterState::summary($state)])
+            ->header('Cache-Control', 'no-store');
+    }
+
+    public function devices(Request $request)
+    {
+        $node = $this->node($request);
+        $users = ServerService::getAvailableUsers($node)->where('device_limit', '>', 0);
+        $ips = app(DeviceStateService::class)->getUsersDevices($users->pluck('id')->all());
+        $ips = ClusterState::canonicalIPs($ips);
+        return response()->json(['alive' => (object) array_map('count', $ips), 'ips' => (object) $ips])
             ->header('Cache-Control', 'no-store');
     }
 }

@@ -346,6 +346,14 @@ func getInboundOptions(tag string, info *panel.NodeInfo, c *conf.Options) (optio
 			Type: n.Network,
 		}
 		switch n.Network {
+		case "httpupgrade":
+			var settings HttpupgradeNetworkConfig
+			if len(n.NetworkSettings) > 0 {
+				if err := json.Unmarshal(n.NetworkSettings, &settings); err != nil {
+					return option.Inbound{}, fmt.Errorf("decode HTTPUpgrade settings: %w", err)
+				}
+			}
+			t.HTTPUpgradeOptions = option.V2RayHTTPUpgradeOptions{Path: settings.Path, Host: settings.Host}
 		case "http", "h2":
 			t.Type = "http"
 			t.HTTPOptions, err = httpTransportSettings(n.NetworkSettings)

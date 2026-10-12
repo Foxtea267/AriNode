@@ -131,6 +131,7 @@ namespace {
     require __DIR__ . '/../AriNode/Controllers/ProvisionController.php';
     require __DIR__ . '/../AriNode/routes/api.php';
     check(Route::$routes['/api/v1/arinode/cluster/report'] === ['POST', 'server.v2'], 'Reports need native server authentication');
+    check(Route::$routes['/api/v1/arinode/devices/alivelist'] === ['GET', 'server.v2'], 'Known IP identities need server authentication');
     check(Route::$routes['/api/v1/arinode/cluster/members'] === ['GET', 'admin'], 'Member inventory must require admin');
     check(Route::$routes['/api/v1/arinode/provision'] === ['POST', 'admin'], 'Provisioning must require admin');
 
@@ -185,5 +186,16 @@ namespace {
     $boundary = ClusterState::record([], 'a', [1=>['192.0.2.1']], null, 100, 180);
     check(count(ClusterState::prune($boundary, 279, 180)['members']) === 1, 'Member expired early');
     check(ClusterState::prune($boundary, 280, 180)['members'] === [], 'Member did not expire at TTL');
+
+    $testStore = new TestStore;
+    $testDevices = new DeviceStateService;
+    foreach ([['192.0.2.1'], ['::ffff:192.0.2.1'], ['192.0.2.1', '2001:db8::1'], ['::ffff:192.0.2.1', '2001:0db8:0000::0001']] as $i => $ips) {
+        $controller->report(new Request($report('hk-0' . ($i + 1), dechex($i + 10), [1=>$ips], 20), $testNode));
+    }
+    $four = $controller->alivelist(new Request([], $testNode))->data;
+    check((array) $four['alive'] === [1=>2], 'Four replicas duplicated mapped IPv4 or equivalent IPv6 client addresses');
+    check(count($controller->members(new Request(['node_id'=>7]))->data['members']) === 4, 'Fourth replica was capped or overwritten');
+    $native = $controller->devices(new Request([], $testNode))->data;
+    check((array) $native['alive'] === [1=>2] && count(((array) $native['ips'])[1]) === 2, 'Native replica identity enrichment failed');
     echo "Xboard cluster controller regression tests passed\n";
 }

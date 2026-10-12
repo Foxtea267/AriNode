@@ -63,6 +63,14 @@ The `init` command creates a mode `0600` config file and refuses to overwrite it
 
 ## Migrate to or from Xboard-Node
 
+### V2bX install, migrate and uninstall in one command
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/install.sh | sudo bash -s -- --migrate-v2bx
+```
+
+For an existing AriNode installation: `sudo anctl migrate from-v2bx`. Return with `sudo anctl migrate to-v2bx`. Full V2bX migration backs up the original installation, copies certificates/native Core assets, checks the destination, then uninstalls the source runtime. The original executable remains in a protected recovery snapshot. Use `--dry-run` to preview, or `--config-only` for nonstandard installations. Add `--cluster-domain pool.example.com --cluster-member hk-04` to migrate a shared-node member; update the XBoard plugin to 0.3.0 first. [Migration, rollback, compatibility and four-server guide](docs/v2bx-migration.md).
+
 On a Linux host with both systemd units installed, either direction is one command:
 
 ```sh

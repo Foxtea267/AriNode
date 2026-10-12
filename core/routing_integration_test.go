@@ -369,3 +369,68 @@ func TestPanelRoutingLiveIsolationAndHotUpdate(t *testing.T) {
 		})
 	}
 }
+
+// Four independent runtime bindings share one logical panel node and package
+// limit. The actual VLESS handshakes must work on the fourth receiver too.
+func TestFourReplicaAuthenticatedConnectionsAtDeviceLimit(t *testing.T) {
+	for _, kernel := range []string{"xray", "sing"} {
+		t.Run(kernel, func(t *testing.T) {
+			cfg := conf.CoreConfig{Type: kernel}
+			if kernel == "xray" {
+				cfg.XrayConfig = conf.NewXrayConfig()
+			} else {
+				cfg.SingConfig = conf.NewSingConfig()
+				cfg.SingConfig.LogConfig.Disabled = true
+			}
+			server, err := core.NewCore([]conf.CoreConfig{cfg})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := server.Start(); err != nil {
+				t.Fatal(err)
+			}
+			defer server.Close()
+			target, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer target.Close()
+			go func() {
+				for {
+					conn, err := target.Accept()
+					if err != nil {
+						return
+					}
+					go func() {
+						defer conn.Close()
+						conn.SetDeadline(time.Now().Add(8 * time.Second))
+						var payload [4]byte
+						if _, err := io.ReadFull(conn, payload[:]); err == nil {
+							conn.Write([]byte("HK!!"))
+						}
+					}()
+				}
+			}()
+			limiter.Init()
+			users := []panel.UserInfo{{Id: 1, Uuid: policyUUID, DeviceLimit: 3}}
+			for i := 1; i <= 4; i++ {
+				tag := fmt.Sprintf("receiver-%d", i)
+				l := limiter.AddLimiter(tag, &conf.LimitConfig{}, users, map[int]int{1: 3})
+				defer limiter.DeleteLimiter(tag)
+				l.SetAliveList(map[int]int{1: 3}, map[int][]string{1: {"127.0.0.1", "192.0.2.1", "192.0.2.2"}})
+				info := &panel.NodeInfo{Id: 7, Type: "vless", Common: &panel.CommonNode{ServerPort: policyPort(t)}, VAllss: &panel.VAllssNode{Network: "tcp"}}
+				options := &conf.Options{Core: kernel, ListenIP: "127.0.0.1"}
+				if err := options.UseCore(kernel); err != nil {
+					t.Fatal(err)
+				}
+				if err := server.AddNode(tag, info, options); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := server.AddUsers(&core.AddUsersParams{Tag: tag, NodeInfo: info, Users: users}); err != nil {
+					t.Fatal(err)
+				}
+				policyDial(t, info.Common.ServerPort, target.Addr().String(), "HK!!").Close()
+			}
+		})
+	}
+}

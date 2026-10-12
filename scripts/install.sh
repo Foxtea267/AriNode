@@ -6,6 +6,21 @@ release_base="https://github.com/${repo}/releases/latest/download"
 config_path='/etc/arinode/config.json'
 service_path='/etc/systemd/system/arinode.service'
 
+# Explicit modes work through curl | sudo bash -s -- without answering the
+# deployment menu. Language selection remains available on /dev/tty.
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --migrate-v2bx) export ARINODE_INSTALL_MODE=migrate-v2bx ;;
+    --migrate-xbnode) export ARINODE_INSTALL_MODE=migrate ;;
+    --cluster-domain|--cluster-member)
+      [[ $# -ge 2 && -n $2 ]] || { printf 'Missing value for %s\n' "$1" >&2; exit 1; }
+      if [[ $1 == --cluster-domain ]]; then export ARINODE_CLUSTER_DOMAIN="$2"; else export ARINODE_CLUSTER_MEMBER="$2"; fi
+      shift ;;
+    *) printf 'Unknown install option: %s\n' "$1" >&2; exit 1 ;;
+  esac
+  shift
+done
+
 fail() { printf 'AriNode install: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 

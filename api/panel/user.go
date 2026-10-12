@@ -130,6 +130,17 @@ func (c *Client) GetUserAlive() (map[int]int, error) {
 	}
 
 	c.AliveIPs = c.AliveMap.IPs
+	// Native XBoard returns only a count. The optional plugin endpoint adds
+	// identities so a known client can move to another replica at its limit.
+	if c.Cluster == nil && c.AliveMap.IPs == nil && len(c.AliveMap.Alive) > 0 {
+		if rich, err := c.client.R().Get("/api/v1/arinode/devices/alivelist"); err == nil && rich != nil && rich.StatusCode() == 200 {
+			var devices AliveMap
+			if json.Unmarshal(rich.Body(), &devices) == nil && devices.Alive != nil && devices.IPs != nil {
+				c.AliveMap = &devices
+				c.AliveIPs = devices.IPs
+			}
+		}
+	}
 	return c.AliveMap.Alive, nil
 }
 

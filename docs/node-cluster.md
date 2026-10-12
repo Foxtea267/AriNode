@@ -4,7 +4,7 @@
 
 ## 部署顺序
 
-1. **先更新 Xboard 插件至 0.2.0 或更新版本**：上传并启用 [`arinode-xboard-plugin.zip`](../dist/arinode-xboard-plugin.zip)。面板需要当前 Xboard 的 `server.v2` 中间件、DeviceStateService 和可用的共享 Redis；运行多个面板实例时须连接同一个 Redis。插件只生成配置和聚合数据，不创建节点。
+1. **先更新 Xboard 插件至 0.3.0 或更新版本**：上传并启用 [`arinode-xboard-plugin.zip`](../dist/arinode-xboard-plugin.zip)。面板需要当前 Xboard 的 `server.v2` 中间件、DeviceStateService 和可用的共享 Redis；运行多个面板实例时须连接同一个 Redis。插件只生成配置和聚合数据，不创建节点。
 2. 在 Xboard 创建一个节点，例如 ID `7`，地址填写 `pool.example.com`，配置协议、端口和 TLS/Reality 参数。所有后端使用同一个节点 ID、面板地址和可读取该节点的密钥。机器认证时使用节点绑定的**同一个逻辑机器 ID 和 token**；原生 Xboard 一个节点只能绑定一台逻辑机器，不能给每个后端填写不同的机器 ID。
 3. 在每台服务器升级 AriNode：`sudo anctl upgrade`。备份 `/etc/arinode/config.json`，参考[节点组配置](../example/node-cluster.config.json)，在这个节点条目内增加：
 

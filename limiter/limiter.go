@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/netip"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -133,7 +132,7 @@ func (l *Limiter) UpdateDynamicSpeedLimit(tag, uuid string, limit int, expire ti
 
 func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool) (Bucket *ratelimit.Bucket, Reject bool) {
 	// check if ipv4 mapped ipv6
-	ip = strings.TrimPrefix(ip, "::ffff:")
+	ip = canonicalDeviceIP(ip)
 
 	// check and gen speed limit Bucket
 	nodeLimit := l.SpeedLimit
@@ -159,39 +158,8 @@ func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool
 		return nil, true
 	}
 	if noSSUDP {
-		// Store online user for device limit
-		newipMap := new(sync.Map)
-		newipMap.Store(ip, uid)
-		l.aliveMu.RLock()
-		aliveIp, knownIP := l.AliveList[uid], l.aliveIPs[uid][ip]
-		l.aliveMu.RUnlock()
-		// If any device is online
-		if v, loaded := l.UserOnlineIP.LoadOrStore(taguuid, newipMap); loaded {
-			oldipMap := v.(*sync.Map)
-			// If this is a new ip
-			if _, loaded := oldipMap.LoadOrStore(ip, uid); !loaded {
-				if v, loaded := l.OldUserOnline.Load(ip); loaded {
-					if v.(int) == uid {
-						l.OldUserOnline.Delete(ip)
-					}
-				} else if deviceLimit > 0 && !knownIP {
-					if deviceLimit <= aliveIp {
-						oldipMap.Delete(ip)
-						return nil, true
-					}
-				}
-			}
-		} else if v, ok := l.OldUserOnline.Load(ip); ok {
-			if v.(int) == uid {
-				l.OldUserOnline.Delete(ip)
-			}
-		} else {
-			if deviceLimit > 0 && !knownIP {
-				if deviceLimit <= aliveIp {
-					l.UserOnlineIP.Delete(taguuid)
-					return nil, true
-				}
-			}
+		if !l.admitDeviceIP(taguuid, uid, ip, deviceLimit) {
+			return nil, true
 		}
 	}
 
@@ -210,6 +178,8 @@ func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool
 }
 
 func (l *Limiter) GetOnlineDevice() (*[]panel.OnlineUser, error) {
+	l.aliveMu.Lock()
+	defer l.aliveMu.Unlock()
 	var onlineUser []panel.OnlineUser
 	l.OldUserOnline = new(sync.Map)
 	l.UserOnlineIP.Range(func(key, value interface{}) bool {
