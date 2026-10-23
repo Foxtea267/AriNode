@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 ## XBoard 插件内置页面
 
-上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.4.1**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称、勾选节点并保存，即可复制带有面板地址、机器专属密钥、节点和内核的一键安装命令，默认 sing-box。
+上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.4.2**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称、勾选节点并保存，即可复制带有面板地址、机器专属密钥、节点和内核的一键安装命令，默认 sing-box。
 
 支持插件菜单的 XBoard 后台会出现 **AriNode 服务器管理 → 服务器与部署命令 / 可绑定节点**。原有 JSON 下发和节点组接口继续保留。见[页面使用、安装范围与兼容说明](docs/xboard-plugin.md)。
 

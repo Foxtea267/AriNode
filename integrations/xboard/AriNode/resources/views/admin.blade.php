@@ -11,8 +11,8 @@
 </head>
 <body>
 <header class="topbar">
-    <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M15 6.5h3M15 17.5h3"/></svg>AriNode <span class="version">0.4.1</span></div>
-    <div class="topbar-tools"><span class="muted">XBoard 插件</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题"></button></div>
+    <div class="brand">AriNode <span class="version">0.4.2</span></div>
+    <div class="topbar-tools"><button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题"></button></div>
 </header>
 <main class="shell">
     <section id="auth" class="auth" hidden>

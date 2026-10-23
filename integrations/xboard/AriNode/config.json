@@ -1,7 +1,7 @@
 {
   "name": "AriNode 服务器管理",
   "code": "ari_node",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "添加服务器、绑定节点和生成一键部署命令；可视化页面：/arinode/admin",
   "author": "AriNode",
   "type": "feature",

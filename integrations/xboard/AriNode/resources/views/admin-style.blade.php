@@ -33,7 +33,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .topbar { position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between; min-height:52px; padding-inline:max(18px,calc((100vw - 1320px)/2)); background:color-mix(in srgb,var(--ui-bg) 68%,transparent); backdrop-filter:blur(18px) saturate(1.15); }
 .brand,.topbar-tools { display:flex; align-items:center; gap:10px; }
 .brand { font-size:14px; font-weight:680; letter-spacing:-.02em; }
-.brand svg { width:20px; height:20px; }
 .version { font-size:10px; color:var(--ui-muted); font-weight:500; border:1px solid var(--ui-border); border-radius:4px; padding:1px 5px; letter-spacing:0; }
 .topbar-tools { gap:18px; }
 .theme-toggle,.icon-button { display:grid; place-items:center; width:32px; height:32px; border:0; background:transparent; color:var(--ui-fg); border-radius:6px; padding:0; }

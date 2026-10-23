@@ -2,7 +2,7 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.4.1** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.4.2** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
 
 无需运行数据库迁移：服务器列表复用 XBoard 的 `ServerMachine` 和节点的 `machine_id`，已有机器记录也会显示。此功能要求支持原生机器管理的新版 XBoard；后台侧栏入口还要求该后台支持 `admin_menus` / `admin_crud`。不支持侧栏扩展的后台仍可使用下面的内置页面。
 
