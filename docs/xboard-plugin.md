@@ -1,0 +1,67 @@
+# XBoard 插件：服务器与一键部署
+
+## 安装 / 升级
+
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.4.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+
+无需运行数据库迁移：服务器列表复用 XBoard 的 `ServerMachine` 和节点的 `machine_id`，已有机器记录也会显示。此功能要求支持原生机器管理的新版 XBoard；后台侧栏入口还要求该后台支持 `admin_menus` / `admin_crud`。不支持侧栏扩展的后台仍可使用下面的内置页面。
+
+## 打开页面
+
+先登录与面板 **同域名** 的管理员后台，再打开：
+
+```text
+https://你的面板域名/arinode/admin
+```
+
+也可以在插件管理中打开 AriNode 的插件说明，点击“打开 AriNode 可视化服务器管理页”。新版后台可从侧栏 **AriNode 服务器管理 → 服务器与部署命令** 新增或编辑记录；可视化页面额外提供节点勾选和命令复制。
+
+页面自动读取官方新版后台的 `XBOARD_ACCESS_TOKEN` 登录记录并检查有效期。旧版 / 定制后台存储方式不同，可临时填入管理员 Authorization 凭证；它仅留在当前页面内存中。普通用户或未登录访客无法读取服务器、节点或部署命令，也无法修改绑定。公开 HTML 外壳不含密钥或服务器资料。
+
+## 添加服务器
+
+1. 先在 XBoard 节点管理中创建、启用需要部署的节点，设置协议、端口、域名和用户分组。
+2. 在 AriNode 页面填写服务器名称和备注，勾选节点，点击 **保存并生成部署命令**。
+3. 插件创建原生机器记录，分配专属密钥并绑定节点；编辑已有记录时保留原密钥。它不改变节点的协议、用户分组或订阅配置。
+4. 默认使用 **sing-box**，也可选择 Xray。HY1/HY2/TUIC/AnyTLS/Mieru 要使用 sing-box，选择 Xray 时会明确报错。
+5. 点击 **复制命令**，在目标 Linux 服务器执行。安装语言、面板地址、机器密钥、节点类型 / ID 和内核均已填好，无需再回答安装问题。
+
+生成的命令采用下面的形式（示例值不能直接部署）：
+
+```sh
+curl -fsSL 'https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/install.sh' | sudo env ARINODE_LANGUAGE='zh' ARINODE_INSTALL_MODE='fresh' ARINODE_PANEL_URL='https://panel.example.com' ARINODE_PANEL_TOKEN='MACHINE_TOKEN' ARINODE_MACHINE_ID='3' ARINODE_NODES='vless:1 anytls:2' ARINODE_CORE='sing' bash
+```
+
+命令下载正式版并写入机器绑定配置，启动 `arinode.service`。它不会开启自动升级。命令含机器专属密钥，只向管理员返回；页面/API 使用 `no-store`，不写浏览器 URL、localStorage 或公开日志。所有命令参数都按 Linux shell 规则引用。
+
+该命令用于从零配置；目标机器已有 AriNode 配置时会先备份再替换，其他面板绑定不会自动合并。已有 [V2bX](v2bx-migration.md) 或 xboard-node 请使用对应迁移流程，不要用从零部署代替迁移。
+
+## 编辑、状态与兼容
+
+- 编辑绑定只更新这台机器，不能直接抢占属于另一机器的节点；先在原机器中移除该绑定再转移。
+- 已部署 AriNode 的机器自动发现功能默认每 30 秒读取绑定变更。至少保留一个启用且受支持的节点才能生成部署命令。停用机器、无可用节点时不生成可执行命令。
+- 服务器列表展示原生机器 ID、启用状态、节点 ID 和最后上报时间。最后上报时间不能替代代理协议连接测试。
+- DNS 多 IP 共用一个节点仍使用 [节点组批量下发](node-cluster.md)，不通过原生单一 `machine_id` 把同一节点同时绑定到多台机器。
+- 原有 JSON 下发 `POST /api/v1/arinode/provision`、节点组、在线 IP 等接口继续保留。
+
+管理员 API：
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| GET | `/api/v1/arinode/admin/servers` | 分页服务器列表和默认部署命令 |
+| GET | `/api/v1/arinode/admin/nodes` | 可绑定节点、安全字段、归属信息 |
+| POST | `/api/v1/arinode/admin/servers/save` | 新增 / 编辑服务器及节点绑定 |
+| POST | `/api/v1/arinode/admin/command` | 按机器 ID、内核和语言生成命令 |
+
+保存请求：`{"name":"US-01","notes":"192.0.2.1","node_ids":[1,2],"is_active":true}`；编辑时增加 `"id":3`。生成命令：`{"id":3,"core":"sing","language":"zh"}`。全部使用 XBoard 原生 `admin` 中间件认证，返回 JSON 不缓存。
+
+## 验证
+
+```sh
+php integrations/xboard/tests/cluster.php
+composer install --working-dir=integrations/xboard/tests
+php integrations/xboard/tests/admin.php
+node --check < integrations/xboard/AriNode/resources/views/admin-script.blade.php
+```
+
+管理页回归使用真实 Illuminate 验证器、路由、Blade 和 SQLite，覆盖创建 / 编辑、事务回滚、跨机器绑定保护、专属密钥、命令引用、协议选择、分页、停用、插件关闭和页面渲染。XBoard 模型与插件启用检查使用最小测试边界；原生 Sanctum 登录、生产 Redis 和具体定制后台需在实际面板环境验证。

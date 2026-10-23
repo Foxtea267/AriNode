@@ -1,9 +1,51 @@
 {
-  "name": "AriNode 节点下发",
+  "name": "AriNode 服务器管理",
   "code": "ari_node",
-  "version": "0.3.0",
-  "description": "下发 AriNode 节点配置，支持 DNS 多 IP 节点组与多服务器上报聚合",
+  "version": "0.4.0",
+  "description": "添加服务器、绑定节点和生成一键部署命令；可视化页面：/arinode/admin",
   "author": "AriNode",
   "type": "feature",
-  "config": {}
+  "config": {},
+  "admin_menus": [
+    {"id":"servers","title":"服务器与部署命令","path":"servers","icon":"server","description":"添加服务器并绑定已有节点，保存后显示 AriNode 部署命令。带复制按钮的可视化页面位于 /arinode/admin。"},
+    {"id":"nodes","title":"可绑定节点","path":"nodes","icon":"network","description":"在 XBoard 节点管理创建节点后，可在服务器页面按 ID 绑定。"}
+  ],
+  "admin_crud": {
+    "servers": {
+      "version":1,"title":"AriNode 服务器","description":"新增服务器并填写节点 ID，保存后可复制部署命令。可视化勾选节点与一键复制页面：/arinode/admin。",
+      "id_field":"id",
+      "api":{"list":"/plugin/ari-node/servers/fetch","save":"/plugin/ari-node/servers/save","delete":""},
+      "columns":[
+        {"key":"name","title":"服务器","type":"string","searchable":true},
+        {"key":"id","title":"机器 ID","type":"number"},
+        {"key":"node_ids_text","title":"节点 ID","type":"string"},
+        {"key":"is_active","title":"启用","type":"boolean"},
+        {"key":"last_seen_at","title":"最后上报","type":"datetime"},
+        {"key":"install_command","title":"AriNode 一键部署命令","type":"string"},
+        {"key":"deploy_error","title":"部署提示","type":"string"}
+      ],
+      "form":{
+        "name":{"type":"string","label":"服务器名称","placeholder":"例如 US-01","required":true},
+        "node_ids_text":{"type":"string","label":"绑定节点 ID","placeholder":"例如 258,259","description":"在可绑定节点页面查看 ID；多个 ID 用逗号分隔。","required":true},
+        "notes":{"type":"text","label":"备注 / IP 或域名"},
+        "is_active":{"type":"boolean","label":"启用服务器","value":true}
+      },
+      "actions":{"create":true,"edit":true,"delete":false}
+    },
+    "nodes": {
+      "version":1,"title":"可绑定节点","description":"服务器页面使用这些节点 ID。其他服务器已占用的节点需先在原服务器解绑。",
+      "id_field":"id",
+      "api":{"list":"/plugin/ari-node/nodes/fetch","save":"","delete":""},
+      "columns":[
+        {"key":"name","title":"节点名称","type":"string"},
+        {"key":"id","title":"节点 ID","type":"number"},
+        {"key":"type","title":"协议","type":"string"},
+        {"key":"host","title":"地址","type":"string"},
+        {"key":"machine_id","title":"所属机器 ID","type":"number"},
+        {"key":"enabled","title":"启用","type":"boolean"},
+        {"key":"supported","title":"AriNode 支持","type":"boolean"}
+      ],
+      "form":{},"actions":{"create":false,"edit":false,"delete":false}
+    }
+  }
 }

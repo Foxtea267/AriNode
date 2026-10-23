@@ -1,0 +1,13 @@
+{
+  "name": "arinode/xboard-plugin-tests",
+  "description": "Isolated framework regression harness for the AriNode XBoard plugin",
+  "require": {
+    "illuminate/database": "^12.0",
+    "illuminate/events": "^12.0",
+    "illuminate/http": "^12.0",
+    "illuminate/routing": "^12.0",
+    "illuminate/validation": "^12.0",
+    "illuminate/view": "^12.0"
+  },
+  "config": {"platform": {"php": "8.2.0"}, "sort-packages": true}
+}

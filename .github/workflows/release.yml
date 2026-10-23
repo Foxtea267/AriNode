@@ -23,10 +23,18 @@ jobs:
         run: GOEXPERIMENT=jsonv2 go test -p 2 -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' ./...
       - name: Validate installer shell syntax
         run: bash -n scripts/install.sh scripts/tune.sh
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite
+          tools: composer
       - name: Validate Xboard plugin and node group reports
         run: |
-          find integrations/xboard -name '*.php' -print0 | xargs -0 -n 1 php -l
+          find integrations/xboard/AriNode -name '*.php' -print0 | xargs -0 -n 1 php -l
           php integrations/xboard/tests/cluster.php
+          composer install --working-dir=integrations/xboard/tests --no-interaction --prefer-dist --no-progress
+          php integrations/xboard/tests/admin.php
+          node --check < integrations/xboard/AriNode/resources/views/admin-script.blade.php
 
   release:
     if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')

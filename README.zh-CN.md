@@ -28,7 +28,13 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 安装后可运行 `sudo anctl bash` 重新进入语言与部署菜单；`anctl status`、`anctl log` 可查看状态。多 Xboard、Komari 面板可参考[多绑定配置](example/multi-bindings.config.json)编辑配置后执行 `sudo anctl restart`。
 
-## 快速部署
+## XBoard 插件内置页面
+
+上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.4.0**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。填写服务器名称、勾选已有节点，点击“保存并生成部署命令”，即可复制带有面板地址、机器专属密钥、节点和内核的一键安装命令，默认 sing-box。支持新增 / 编辑服务器、查看最后上报时间，以及选择安装语言和 Xray 内核。
+
+支持插件菜单的 XBoard 后台会出现 **AriNode 服务器管理 → 服务器与部署命令 / 可绑定节点**。原有 JSON 下发和节点组接口继续保留。见[页面使用、安装范围与兼容说明](docs/xboard-plugin.md)。
+
+## Docker / JSON 部署
 
 1. 在 Xboard 中创建并启用节点，记录节点 ID。可选：创建机器并把节点绑定到机器。
 2. 上传 [Xboard 插件](dist/arinode-xboard-plugin.zip)，启用 `ari_node`。管理员调用 `POST /api/v1/arinode/provision`，提交 `{"node_ids":[1,2],"core":"sing"}`。如使用机器专属密钥，再传 `"machine_id":3`。

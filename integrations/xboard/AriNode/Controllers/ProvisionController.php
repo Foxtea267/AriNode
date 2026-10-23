@@ -7,6 +7,8 @@ use App\Models\Server;
 use App\Models\ServerMachine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Plugin\AriNode\Services\Deployment;
+use InvalidArgumentException;
 
 class ProvisionController extends PluginController
 {
@@ -51,16 +53,9 @@ class ProvisionController extends PluginController
         $clusterDomain = strtolower(rtrim(trim($params['cluster_domain'] ?? ''), '.'));
         foreach ($ids as $id) {
             $server = $servers->get($id);
-            $type = Server::normalizeType($server->type);
-            if ($type === 'hysteria' && (int) ($server->protocol_settings['version'] ?? 0) === 2) {
-                $type = 'hysteria2';
-            }
-            if (!in_array($type, ['vmess', 'vless', 'trojan', 'shadowsocks', 'hysteria', 'hysteria2', 'tuic', 'anytls', 'mieru'], true)) {
-                return response()->json(['message' => "Node {$id} uses unsupported protocol {$type}"], 422);
-            }
-            if ($core === 'xray' && !in_array($type, ['vmess', 'vless', 'trojan', 'shadowsocks'], true)) {
-                return response()->json(['message' => "Protocol {$type} requires the sing core"], 422);
-            }
+            $type = Deployment::nodeType($server);
+            try { Deployment::validateProtocol($type, $core); }
+            catch (InvalidArgumentException $e) { return response()->json(['message' => "Node {$id}: {$e->getMessage()}"], 422); }
             if (!$server->enabled) {
                 return response()->json(['message' => "Node {$id} is disabled"], 422);
             }

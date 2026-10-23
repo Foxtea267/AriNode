@@ -119,6 +119,7 @@ namespace {
     function abort_if(bool $value, $code, $message): void { if ($value) { throw new \RuntimeException($message, $code); } }
     function abort_unless(bool $value, $code, $message): void { abort_if(!$value, $code, $message); }
     function admin_setting($key, $default = null) { return ['server_token'=>'test-token', 'app_url'=>'https://panel.example.com'][$key] ?? $default; }
+    function config($key) { return 'test-app-key'; }
     function app($class) { return $GLOBALS['testDevices']; }
     function check($value, $message): void { if (!$value) { throw new \RuntimeException($message); } }
     function rejects($callback, $code): void {
@@ -127,6 +128,7 @@ namespace {
     }
 
     require __DIR__ . '/../AriNode/Services/ClusterState.php';
+    require __DIR__ . '/../AriNode/Services/Deployment.php';
     require __DIR__ . '/../AriNode/Controllers/ClusterController.php';
     require __DIR__ . '/../AriNode/Controllers/ProvisionController.php';
     require __DIR__ . '/../AriNode/routes/api.php';
