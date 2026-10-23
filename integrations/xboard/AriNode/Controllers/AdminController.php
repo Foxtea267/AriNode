@@ -36,6 +36,13 @@ class AdminController extends PluginController
             ->header('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'self'");
     }
 
+    public function entry(): JsonResponse
+    {
+        $this->enabled();
+        return response()->json(['data' => [['id' => 1, 'url' => '/arinode/admin']], 'total' => 1])
+            ->header('Cache-Control', 'no-store');
+    }
+
     public function nodes(Request $request): JsonResponse
     {
         $this->enabled();

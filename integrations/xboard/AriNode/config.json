@@ -1,16 +1,24 @@
 {
   "name": "AriNode 服务器管理",
   "code": "ari_node",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "添加服务器、绑定节点和生成一键部署命令；可视化页面：/arinode/admin",
   "author": "AriNode",
   "type": "feature",
   "config": {},
   "admin_menus": [
+    {"id":"entry","title":"管理页面","path":"entry","icon":"server","description":"打开 AriNode 独立管理页面，支持服务器表格、节点目录与一键部署。"},
     {"id":"servers","title":"服务器与部署命令","path":"servers","icon":"server","description":"添加服务器并绑定已有节点，保存后显示 AriNode 部署命令。带复制按钮的可视化页面位于 /arinode/admin。"},
     {"id":"nodes","title":"可绑定节点","path":"nodes","icon":"network","description":"在 XBoard 节点管理创建节点后，可在服务器页面按 ID 绑定。"}
   ],
   "admin_crud": {
+    "entry": {
+      "version":1,"title":"AriNode 管理页面","description":"打开完整管理页面，添加服务器、绑定节点并复制部署命令。",
+      "id_field":"id",
+      "api":{"list":"/plugin/ari-node/entry","save":"","delete":""},
+      "columns":[{"key":"url","title":"服务器管理","type":"link","label":"打开 AriNode 管理页面","target":"_blank"}],
+      "form":{},"actions":{"create":false,"edit":false,"delete":false}
+    },
     "servers": {
       "version":1,"title":"AriNode 服务器","description":"新增服务器并填写节点 ID，保存后可复制部署命令。可视化勾选节点与一键复制页面：/arinode/admin。",
       "id_field":"id",

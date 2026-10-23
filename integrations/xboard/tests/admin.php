@@ -115,7 +115,7 @@ namespace {
     require __DIR__ . '/../AriNode/routes/web.php';
     $routes = [];
     foreach ($router->getRoutes() as $route) { $routes['/' . $route->uri()] = $route; }
-    foreach (['/api/v1/arinode/admin/servers','/api/v1/arinode/admin/nodes','/api/v1/arinode/admin/servers/save','/api/v1/arinode/admin/command',
+    foreach (['/api/v1/arinode/admin/entry','/api/v2/test-admin/plugin/ari-node/entry','/api/v1/arinode/admin/servers','/api/v1/arinode/admin/nodes','/api/v1/arinode/admin/servers/save','/api/v1/arinode/admin/command',
         '/api/v2/test-admin/plugin/ari-node/servers/fetch','/api/v2/test-admin/plugin/ari-node/servers/save','/api/v2/test-admin/plugin/ari-node/nodes/fetch'] as $path) {
         check(in_array('admin', $routes[$path]->gatherMiddleware(), true), "Unprotected data route {$path}");
     }
@@ -132,6 +132,7 @@ namespace {
             'protocol_settings'=>['version'=>2]]);
     }
     $controller = new AdminController();
+    check(data($controller->entry())['data'][0]['url'] === '/arinode/admin', 'Plugin menu entry points to the wrong page');
     $saved = data($controller->save(req(['name'=>'US-01','notes'=>'US / 192.0.2.1','node_ids'=>[1,2]])));
     $id = $saved['data']['id']; $machine = ServerMachine::findOrFail($id);
     check(strlen($machine->token) === 32 && $machine->is_active, 'Machine token/default enabled was not saved');
@@ -173,7 +174,7 @@ namespace {
     $disabledRow = data($controller->servers(req(['search'=>'US updated'])))['data'][0];
     check($disabledRow['install_command'] === '' && $disabledRow['deploy_error'] !== '', 'Disabled machine leaked an executable command');
     $controller->disabled = true;
-    foreach ([fn() => $controller->servers(req()), fn() => $controller->nodes(req()), fn() => $controller->save(req()), fn() => $controller->command(req()), fn() => $controller->page()] as $action) {
+    foreach ([fn() => $controller->entry(), fn() => $controller->servers(req()), fn() => $controller->nodes(req()), fn() => $controller->save(req()), fn() => $controller->command(req()), fn() => $controller->page()] as $action) {
         rejects($action, HttpException::class);
     }
     $controller->disabled = false;

@@ -6,6 +6,7 @@ use Plugin\AriNode\Controllers\ClusterController;
 use Plugin\AriNode\Controllers\AdminController;
 
 Route::middleware('admin')->group(function () {
+    Route::get('/api/v1/arinode/admin/entry', [AdminController::class, 'entry']);
     Route::get('/api/v1/arinode/admin/servers', [AdminController::class, 'servers']);
     Route::get('/api/v1/arinode/admin/nodes', [AdminController::class, 'nodes']);
     Route::post('/api/v1/arinode/admin/servers/save', [AdminController::class, 'save']);
@@ -14,6 +15,7 @@ Route::middleware('admin')->group(function () {
     $secure = admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key'))));
     $secure = trim((string) $secure, '/');
     $base = '/api/v2' . ($secure !== '' ? '/' . $secure : '') . '/plugin/ari-node';
+    Route::get($base . '/entry', [AdminController::class, 'entry']);
     Route::get($base . '/servers/fetch', [AdminController::class, 'servers']);
     Route::post($base . '/servers/save', [AdminController::class, 'save']);
     Route::get($base . '/nodes/fetch', [AdminController::class, 'nodes']);

@@ -2,13 +2,15 @@
 (() => {
     const $ = id => document.getElementById(id);
     let token = '', page = 1, total = 0, rows = [], nodes = [], editing = null, deploying = null;
-    let commandRequest = 0;
+    let commandRequest = 0, saving = false;
     const selected = new Set();
-    function notice(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); }
+    function notice(message, error = false) {
+        $('notice').textContent = message; $('notice').hidden = !message;
+        $('notice').classList.toggle('error', error);
+    }
+    function errorAt(id, message = '') { $(id).textContent = message; $(id).hidden = !message; }
     function storedToken() {
         try {
-            // XBoard admin-dist's official storage: uppercased prefix/key and
-            // {value,time,expire}. No scans of unrelated browser credentials.
             const record = JSON.parse(localStorage.getItem('XBOARD_ACCESS_TOKEN') || 'null');
             return record && (!record.expire || record.expire > Date.now()) && typeof record.value === 'string' ? record.value : '';
         } catch (_) { return ''; }
@@ -18,52 +20,109 @@
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
             if (response.status === 401 || response.status === 403) {
-                $('auth').hidden = false; $('workspace').hidden = true; clearCommand();
+                $('auth').hidden = false; $('workspace').hidden = true;
+                $('server-dialog').close(); $('deployment').close(); invalidateCommand();
             }
             throw new Error(Object.values(data.errors || {}).flat().join('；') || data.message || '请求失败（' + response.status + '）');
         }
         return data;
     }
-    function text(tag, value, className) { const el = document.createElement(tag); el.textContent = value; if (className) el.className = className; return el; }
-    function button(label, action) { const el = text('button', label); el.type = 'button'; el.className = 'secondary'; el.addEventListener('click', () => action().catch(e => notice(e.message, true))); return el; }
+    function text(tag, value, className) {
+        const el = document.createElement(tag); el.textContent = value;
+        if (className) el.className = className;
+        return el;
+    }
+    function cell(row, label) {
+        const el = document.createElement('td'); el.dataset.label = label; row.append(el); return el;
+    }
+    function button(label, action) {
+        const el = text('button', label, 'button subtle'); el.type = 'button';
+        el.addEventListener('click', () => action().catch(e => notice(e.message, true)));
+        return el;
+    }
+    function emptyRow(target, columns, title, subtitle = '') {
+        const row = document.createElement('tr'), td = document.createElement('td'); td.colSpan = columns; td.className = 'empty';
+        td.append(text('strong', title), text('span', subtitle)); row.append(td); target.append(row);
+    }
+    function status(enabled, supported = true) {
+        const pill = text('span', '', 'pill' + (enabled && supported ? ' enabled' : ''));
+        pill.append(text('span', '', 'status-dot'), text('span', !supported ? '暂不支持' : enabled ? '已启用' : '已停用'));
+        return pill;
+    }
+    function date(value) { return value ? new Date(value * 1000).toLocaleString() : '尚未上报'; }
+    function stats() {
+        $('stat-servers').textContent = total;
+        $('stat-nodes').textContent = nodes.filter(n => n.enabled && n.supported).length;
+        const latest = Math.max(0, ...rows.map(row => Number(row.last_seen_at) || 0));
+        $('stat-report').textContent = latest ? date(latest) : '尚未上报';
+    }
     function renderNodes() {
-        const query = $('node-search').value.trim().toLowerCase();
-        const options = $('node-options'); options.replaceChildren();
+        const query = $('node-search').value.trim().toLowerCase(), options = $('node-options'); options.replaceChildren();
         nodes.filter(n => (n.name + ' ' + n.id + ' ' + n.type).toLowerCase().includes(query)).forEach(n => {
             const label = document.createElement('label'); label.className = 'node-option';
             const input = document.createElement('input'); input.type = 'checkbox'; input.checked = selected.has(n.id);
-            // An existing unsupported binding must still be removable.
             input.disabled = (!n.supported && !selected.has(n.id)) || (!!n.machine_id && n.machine_id !== editing);
-            input.addEventListener('change', () => { if (input.checked) selected.add(n.id); else selected.delete(n.id); if (!n.supported) renderNodes(); });
+            input.addEventListener('change', () => {
+                if (input.checked) selected.add(n.id); else selected.delete(n.id);
+                $('selected-count').textContent = '已选 ' + selected.size + ' 个';
+                if (!n.supported) renderNodes();
+            });
             const detail = text('span', n.name + ' · #' + n.id);
             detail.append(text('span', n.type + ' · ' + n.host + (!n.enabled ? ' · 已停用' : '') + (!n.supported ? ' · 暂不支持' : '') + (n.machine_id ? ' · 机器 #' + n.machine_id : ' · 未绑定'), 'node-detail'));
             label.append(input, detail); options.append(label);
         });
-        if (!options.childElementCount) options.append(text('div', '暂无匹配节点，请先在 XBoard 创建节点。', 'empty'));
+        $('selected-count').textContent = '已选 ' + selected.size + ' 个';
+        if (!options.childElementCount) options.append(text('div', '没有匹配的节点', 'empty'));
+    }
+    function renderDirectory() {
+        const query = $('directory-search').value.trim().toLowerCase();
+        const filtered = nodes.filter(n => (n.name + ' ' + n.id + ' ' + n.type + ' ' + n.host).toLowerCase().includes(query));
+        const body = $('node-directory'); body.replaceChildren();
+        filtered.forEach(n => {
+            const row = document.createElement('tr'), title = text('div', n.name, 'server-name');
+            const name = document.createElement('div'); name.append(title, text('div', '#' + n.id, 'cell-note machine-id'));
+            cell(row, '节点').append(name); cell(row, '协议').append(text('span', n.type, 'pill'));
+            cell(row, '地址').append(text('span', n.host, 'cell-note'));
+            cell(row, '所属服务器').textContent = n.machine_id ? '机器 #' + n.machine_id : '未绑定';
+            cell(row, '状态').append(status(n.enabled, n.supported)); body.append(row);
+        });
+        if (!filtered.length) emptyRow(body, 5, '没有匹配的节点', '请在 XBoard 节点管理中创建节点，或调整搜索条件。');
+        $('directory-summary').textContent = '显示 ' + filtered.length + ' / ' + nodes.length + ' 个节点';
+        $('nodes-total').textContent = nodes.length;
     }
     function renderServers() {
-        const list = $('server-list'); list.replaceChildren();
-        rows.forEach(row => {
-            const card = document.createElement('article'); card.className = 'server-row';
-            card.append(text('div', row.name + ' · #' + row.id, 'server-title'));
-            const seen = row.last_seen_at ? new Date(row.last_seen_at * 1000).toLocaleString() : '尚未上报';
-            card.append(text('div', (row.is_active ? '已启用' : '已停用') + ' · ' + row.nodes_count + ' 个节点 · 最后上报：' + seen, 'muted'));
-            card.append(text('div', '节点 ID：' + (row.node_ids_text || '未绑定'), 'muted'));
-            if (row.notes) card.append(text('div', row.notes, 'muted server-notes'));
-            const actions = document.createElement('div'); actions.className = 'row-actions';
-            actions.append(button('编辑绑定', async () => { await loadNodes(); edit(row); }), button('部署命令', async () => { deploying = row; await showCommand(); $('deployment').scrollIntoView({behavior:'smooth', block:'nearest'}); }));
-            card.append(actions); list.append(card);
+        const list = $('server-list'); list.replaceChildren(); const byId = new Map(nodes.map(n => [n.id, n]));
+        rows.forEach(server => {
+            const row = document.createElement('tr'), name = document.createElement('div');
+            name.append(text('span', server.name, 'server-name'), text('div', '机器 #' + server.id + (server.notes ? ' · ' + server.notes : ''), 'cell-note'));
+            cell(row, '服务器').append(name); cell(row, '状态').append(status(server.is_active));
+            const bindings = document.createElement('div'), pills = document.createElement('div'); pills.className = 'node-pills';
+            const protocols = [...new Set(server.node_ids.map(id => byId.get(id)?.type).filter(Boolean))];
+            protocols.forEach(protocol => pills.append(text('span', protocol, 'pill')));
+            bindings.append(pills, text('div', server.node_ids.length ? server.node_ids.length + ' 个节点 · ' + server.node_ids_text : '尚未绑定节点', 'cell-note'));
+            cell(row, '绑定节点').append(bindings); cell(row, '最后上报').textContent = date(server.last_seen_at);
+            const actions = document.createElement('div'); actions.className = 'actions';
+            actions.append(button('编辑绑定', async () => openEditor(server)), button('部署命令', async () => { deploying = server; await showCommand(); }));
+            cell(row, '操作').append(actions); list.append(row);
         });
-        if (!rows.length) list.append(text('div', '还没有服务器，先添加一台。', 'empty'));
-        $('total').textContent = total + ' 台'; $('page-label').textContent = '第 ' + page + ' 页';
-        $('previous').disabled = page <= 1; $('next').disabled = page * 20 >= total;
+        if (!rows.length) emptyRow(list, 5, '还没有匹配的服务器', '点击右上角“添加服务器”开始部署，或调整搜索条件。');
+        $('total').textContent = total; $('list-summary').textContent = '共 ' + total + ' 台服务器';
+        $('page-label').textContent = page + ' / ' + Math.max(1, Math.ceil(total / 20));
+        $('previous').disabled = page <= 1; $('next').disabled = page * 20 >= total; stats();
     }
-    function clearCommand() { commandRequest++; $('deployment').hidden = true; $('deploy-command').value = ''; $('copy-command').disabled = true; }
-    function edit(row) {
-        editing = row ? row.id : null; selected.clear(); (row?.node_ids || []).forEach(id => selected.add(id));
-        $('server-name').value = row?.name || ''; $('server-notes').value = row?.notes || '';
-        $('server-active').checked = row ? row.is_active : true; $('form-title').textContent = row ? '编辑 ' + row.name : '添加服务器';
-        $('node-search').value = ''; renderNodes(); $('server-name').focus();
+    function invalidateCommand() {
+        commandRequest++; $('deploy-command').value = ''; $('copy-command').disabled = true;
+        $('command-status').textContent = ''; errorAt('deploy-error');
+    }
+    async function openEditor(server) {
+        editing = server ? server.id : null; selected.clear(); (server?.node_ids || []).forEach(id => selected.add(id));
+        $('server-name').value = server?.name || ''; $('server-notes').value = server?.notes || '';
+        $('server-active').checked = server ? server.is_active : true;
+        $('form-title').textContent = server ? '编辑服务器' : '添加服务器';
+        $('node-search').value = ''; errorAt('server-error'); renderNodes();
+        if (!$('server-dialog').open) $('server-dialog').showModal();
+        $('server-name').focus();
+        try { await loadNodes(); } catch (e) { errorAt('server-error', e.message); }
     }
     async function loadNodes() {
         let current = 1, all = [];
@@ -71,48 +130,80 @@
             const response = await api('nodes?current=' + current + '&pageSize=100');
             all = all.concat(response.data); if (all.length >= response.total || !response.data.length) break; current++;
         }
-        nodes = all; renderNodes();
+        nodes = all; renderNodes(); renderDirectory(); stats();
     }
     async function loadServers() {
         const response = await api('servers?current=' + page + '&pageSize=20&search=' + encodeURIComponent($('server-search').value));
         rows = response.data; total = response.total; renderServers();
     }
     async function showCommand() {
-        const row = deploying; if (!row) return;
-        clearCommand(); const request = commandRequest;
-        // Keep selectors available after validation failures (e.g. selecting
-        // Xray for AnyTLS), while never leaving the old executable command visible.
-        $('deployment-title').textContent = row.name + ' · 一键部署'; $('deployment').hidden = false;
-        const response = await api('command', {id: row.id, core: $('deploy-core').value, language: $('deploy-language').value});
-        if (request !== commandRequest) return;
-        $('deploy-command').value = response.data.command;
-        $('deployment').hidden = false; $('copy-command').disabled = false;
-        if ($('notice').classList.contains('error')) notice('');
+        const server = deploying; if (!server) return;
+        invalidateCommand(); const request = commandRequest;
+        $('deployment-title').textContent = server.name + ' · 一键部署'; $('command-status').textContent = '正在生成部署命令…';
+        if (!$('deployment').open) $('deployment').showModal();
+        try {
+            const response = await api('command', {id: server.id, core: $('deploy-core').value, language: $('deploy-language').value});
+            if (request !== commandRequest || !$('deployment').open) return;
+            $('deploy-command').value = response.data.command; $('copy-command').disabled = false;
+            $('command-status').textContent = '命令已就绪';
+        } catch (e) {
+            if (request !== commandRequest) return;
+            $('command-status').textContent = ''; errorAt('deploy-error', e.message);
+        }
     }
     async function connect() {
-        if (!token) { $('auth').hidden = false; $('workspace').hidden = true; notice('请先登录同域名的 XBoard 管理员后台。'); return; }
+        if (!token) { $('auth').hidden = false; $('workspace').hidden = true; return; }
         await loadNodes(); await loadServers(); $('auth').hidden = true; $('workspace').hidden = false; notice('');
     }
+    function tab(name, focus = false) {
+        for (const item of ['servers', 'nodes']) {
+            const active = item === name, control = $('tab-' + item);
+            control.classList.toggle('active', active); control.setAttribute('aria-selected', String(active)); control.tabIndex = active ? 0 : -1;
+            $(item + '-panel').hidden = !active;
+        }
+        if (focus) $('tab-' + name).focus();
+    }
+    function busy(value) {
+        saving = value;
+        for (const id of ['save-server', 'close-server', 'cancel-server']) $(id).disabled = value;
+        $('save-server').textContent = value ? '正在保存…' : '保存并生成部署命令';
+    }
     $('server-form').addEventListener('submit', async event => {
-        event.preventDefault(); $('save-server').disabled = true; clearCommand();
+        event.preventDefault(); if (saving) return;
+        if (!selected.size) { errorAt('server-error', '请至少选择一个节点。'); return; }
+        busy(true); errorAt('server-error');
         try {
-            const response = await api('servers/save', {...(editing ? {id: editing} : {}), name: $('server-name').value, notes: $('server-notes').value, is_active: $('server-active').checked, node_ids: [...selected]});
-            editing = response.data.id; deploying = {id: editing, name: $('server-name').value};
-            $('form-title').textContent = '编辑 ' + deploying.name;
+            const name = $('server-name').value, active = $('server-active').checked;
+            const response = await api('servers/save', {...(editing ? {id: editing} : {}), name, notes: $('server-notes').value, is_active: active, node_ids: [...selected]});
+            editing = response.data.id; deploying = {id: editing, name}; $('server-dialog').close();
             await loadNodes(); await loadServers(); notice(response.warning || '服务器已保存。');
-            if ($('server-active').checked) await showCommand();
-        } catch (e) { notice(e.message, true); } finally { $('save-server').disabled = false; }
+            if (active) await showCommand();
+        } catch (e) { if ($('server-dialog').open) errorAt('server-error', e.message); else notice(e.message, true); }
+        finally { busy(false); }
     });
     $('copy-command').addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText($('deploy-command').value); notice('部署命令已复制。'); }
-        catch (_) { $('deploy-command').focus(); $('deploy-command').select(); notice('请按 Ctrl+C / ⌘C 复制已选中的命令。'); }
+        if ($('copy-command').disabled) return;
+        try { await navigator.clipboard.writeText($('deploy-command').value); $('command-status').textContent = '部署命令已复制'; }
+        catch (_) { $('deploy-command').focus(); $('deploy-command').select(); $('command-status').textContent = '请按 Ctrl+C / ⌘C 复制已选中的命令。'; }
     });
+    $('deployment').addEventListener('close', invalidateCommand);
+    for (const id of ['close-deployment', 'done-deployment']) $(id).addEventListener('click', () => $('deployment').close());
+    for (const id of ['close-server', 'cancel-server']) $(id).addEventListener('click', () => { if (!saving) $('server-dialog').close(); });
+    $('server-dialog').addEventListener('cancel', event => { if (saving) event.preventDefault(); });
     $('auth-form').addEventListener('submit', event => { event.preventDefault(); token = $('auth-token').value.trim(); $('auth-token').value = ''; connect().catch(e => notice(e.message, true)); });
-    $('refresh').addEventListener('click', () => { token = storedToken() || token; clearCommand(); connect().catch(e => notice(e.message, true)); });
-    $('new-server').addEventListener('click', () => { clearCommand(); edit(null); });
-    $('node-search').addEventListener('input', renderNodes);
+    const refresh = () => { token = storedToken() || token; invalidateCommand(); connect().catch(e => notice(e.message, true)); };
+    $('refresh').addEventListener('click', refresh); $('auth-refresh').addEventListener('click', refresh);
+    $('new-server').addEventListener('click', () => openEditor(null));
+    $('node-search').addEventListener('input', renderNodes); $('directory-search').addEventListener('input', renderDirectory);
     $('search-form').addEventListener('submit', event => { event.preventDefault(); page = 1; loadServers().catch(e => notice(e.message, true)); });
     for (const [id, step] of [['previous', -1], ['next', 1]]) $(id).addEventListener('click', () => { page += step; loadServers().catch(e => notice(e.message, true)); });
-    for (const id of ['deploy-core', 'deploy-language']) $(id).addEventListener('change', () => showCommand().catch(e => notice(e.message, true)));
+    for (const id of ['deploy-core', 'deploy-language']) $(id).addEventListener('change', showCommand);
+    for (const name of ['servers', 'nodes']) {
+        $('tab-' + name).addEventListener('click', () => tab(name));
+        $('tab-' + name).addEventListener('keydown', event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault(); tab(event.key === 'Home' ? 'servers' : event.key === 'End' ? 'nodes' : name === 'servers' ? 'nodes' : 'servers', true);
+        });
+    }
     token = storedToken(); connect().catch(e => notice(e.message, true));
 })();

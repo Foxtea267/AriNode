@@ -2,7 +2,7 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.4.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.4.1** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
 
 无需运行数据库迁移：服务器列表复用 XBoard 的 `ServerMachine` 和节点的 `machine_id`，已有机器记录也会显示。此功能要求支持原生机器管理的新版 XBoard；后台侧栏入口还要求该后台支持 `admin_menus` / `admin_crud`。不支持侧栏扩展的后台仍可使用下面的内置页面。
 
@@ -14,14 +14,14 @@
 https://你的面板域名/arinode/admin
 ```
 
-也可以在插件管理中打开 AriNode 的插件说明，点击“打开 AriNode 可视化服务器管理页”。新版后台可从侧栏 **AriNode 服务器管理 → 服务器与部署命令** 新增或编辑记录；可视化页面额外提供节点勾选和命令复制。
+也可以从侧栏 **AriNode 服务器管理 → 管理页面** 点击打开链接，或在插件说明中点击“打开 AriNode 可视化服务器管理页”。新版后台原有的 **服务器与部署命令 / 可绑定节点** 页面继续提供兼容入口。
 
 页面自动读取官方新版后台的 `XBOARD_ACCESS_TOKEN` 登录记录并检查有效期。旧版 / 定制后台存储方式不同，可临时填入管理员 Authorization 凭证；它仅留在当前页面内存中。普通用户或未登录访客无法读取服务器、节点或部署命令，也无法修改绑定。公开 HTML 外壳不含密钥或服务器资料。
 
 ## 添加服务器
 
 1. 先在 XBoard 节点管理中创建、启用需要部署的节点，设置协议、端口、域名和用户分组。
-2. 在 AriNode 页面填写服务器名称和备注，勾选节点，点击 **保存并生成部署命令**。
+2. 点击 AriNode 页面右上角 **添加服务器**，在弹窗中填写名称和备注、勾选节点，点击 **保存并生成部署命令**。
 3. 插件创建原生机器记录，分配专属密钥并绑定节点；编辑已有记录时保留原密钥。它不改变节点的协议、用户分组或订阅配置。
 4. 默认使用 **sing-box**，也可选择 Xray。HY1/HY2/TUIC/AnyTLS/Mieru 要使用 sing-box，选择 Xray 时会明确报错。
 5. 点击 **复制命令**，在目标 Linux 服务器执行。安装语言、面板地址、机器密钥、节点类型 / ID 和内核均已填好，无需再回答安装问题。
@@ -33,6 +33,8 @@ curl -fsSL 'https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/ins
 ```
 
 命令下载正式版并写入机器绑定配置，启动 `arinode.service`。它不会开启自动升级。命令含机器专属密钥，只向管理员返回；页面/API 使用 `no-store`，不写浏览器 URL、localStorage 或公开日志。所有命令参数都按 Linux shell 规则引用。
+
+服务器视图使用紧凑表格；“节点目录”可搜索协议、地址和节点归属。新增 / 编辑及部署命令使用独立弹窗，关闭命令弹窗即清空其中的密钥内容。右上角主题按钮可切换深浅色，默认跟随系统，并共享风控等插件的 `xboard_plugin_theme` 偏好。手机端表格按字段转换为纵向布局。概览中服务器数量对应当前搜索结果，最近上报时间仅统计当前页。
 
 该命令用于从零配置；目标机器已有 AriNode 配置时会先备份再替换，其他面板绑定不会自动合并。已有 [V2bX](v2bx-migration.md) 或 xboard-node 请使用对应迁移流程，不要用从零部署代替迁移。
 
