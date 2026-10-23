@@ -71,7 +71,7 @@ namespace {
         throw new \RuntimeException('Expected rejection: ' . $type);
     }
     function config($key) { return 'test-app-key'; }
-    function admin_setting($key, $default = null) { return ['secure_path'=>'test-admin', 'app_url'=>"https://panel.example.com/sub'path"][$key] ?? $default; }
+    function admin_setting($key, $default = null) { return ['secure_path'=>$GLOBALS['testAdminPath'] ?? 'test-admin', 'app_url'=>"https://panel.example.com/sub'path"][$key] ?? $default; }
     function app($key = null) { return $key ? $GLOBALS['container']->make($key) : $GLOBALS['container']; }
     function abort_if($condition, $code, $message): void { if ($condition) { throw new HttpException($code, $message); } }
     function abort_unless($condition, $code, $message): void { abort_if(!$condition, $code, $message); }
@@ -120,6 +120,11 @@ namespace {
         check(in_array('admin', $routes[$path]->gatherMiddleware(), true), "Unprotected data route {$path}");
     }
     check($routes['/arinode/admin']->methods() === ['GET', 'HEAD'], 'HTML shell route missing');
+    $testAdminPath = '';
+    require __DIR__ . '/../AriNode/routes/api.php';
+    $emptyPath = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v2/plugin/ari-node/servers/fetch');
+    check(count($emptyPath) === 1 && in_array('admin', array_values($emptyPath)[0]->gatherMiddleware(),true), 'Empty secure_path generated an unusable/unprotected alias');
+    unset($testAdminPath);
 
     $other = ServerMachine::create(['name'=>'Existing server','token'=>'existing-token','is_active'=>true]);
     foreach ([['vless',null],['anytls',null],['vless',$other->id],['naive',null],['hysteria',null]] as $i => [$type,$machine]) {
@@ -150,6 +155,7 @@ namespace {
     $controller->save(req(['id'=>$id,'name'=>'US updated','node_ids_text'=>'2, 5','install_command'=>'malicious ignored input']));
     check(Server::find(1)->machine_id === null && Server::find(2)->machine_id === $id && Server::find(5)->machine_id === $id, 'Binding replacement incorrect');
     check(Server::find(3)->machine_id === $other->id, 'Another machine changed');
+    check(ServerMachine::find($id)->token === $machine->token, 'Editing rotated the original machine token');
     $command = data($controller->command(req(['id'=>$id,'language'=>'en'])))['data']['command'];
     check(str_contains($command,"ARINODE_LANGUAGE='en'") && str_contains($command,'hysteria2:5'), 'HY2 or language normalization incorrect');
     $inventory = data($controller->servers(req(['search'=>'US updated','pageSize'=>1])));

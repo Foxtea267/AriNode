@@ -12,7 +12,8 @@ Route::middleware('admin')->group(function () {
     Route::post('/api/v1/arinode/admin/command', [AdminController::class, 'command']);
     // XBoard's native plugin CRUD runtime prefixes APIs with /api/v2/<secure_path>.
     $secure = admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key'))));
-    $base = '/api/v2/' . trim($secure, '/') . '/plugin/ari-node';
+    $secure = trim((string) $secure, '/');
+    $base = '/api/v2' . ($secure !== '' ? '/' . $secure : '') . '/plugin/ari-node';
     Route::get($base . '/servers/fetch', [AdminController::class, 'servers']);
     Route::post($base . '/servers/save', [AdminController::class, 'save']);
     Route::get($base . '/nodes/fetch', [AdminController::class, 'nodes']);

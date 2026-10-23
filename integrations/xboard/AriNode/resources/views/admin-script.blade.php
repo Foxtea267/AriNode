@@ -32,8 +32,9 @@
         nodes.filter(n => (n.name + ' ' + n.id + ' ' + n.type).toLowerCase().includes(query)).forEach(n => {
             const label = document.createElement('label'); label.className = 'node-option';
             const input = document.createElement('input'); input.type = 'checkbox'; input.checked = selected.has(n.id);
-            input.disabled = !n.supported || (!!n.machine_id && n.machine_id !== editing);
-            input.addEventListener('change', () => { if (input.checked) selected.add(n.id); else selected.delete(n.id); });
+            // An existing unsupported binding must still be removable.
+            input.disabled = (!n.supported && !selected.has(n.id)) || (!!n.machine_id && n.machine_id !== editing);
+            input.addEventListener('change', () => { if (input.checked) selected.add(n.id); else selected.delete(n.id); if (!n.supported) renderNodes(); });
             const detail = text('span', n.name + ' · #' + n.id);
             detail.append(text('span', n.type + ' · ' + n.host + (!n.enabled ? ' · 已停用' : '') + (!n.supported ? ' · 暂不支持' : '') + (n.machine_id ? ' · 机器 #' + n.machine_id : ' · 未绑定'), 'node-detail'));
             label.append(input, detail); options.append(label);
