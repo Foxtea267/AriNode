@@ -40,7 +40,7 @@ namespace {
     $temp = tempnam(sys_get_temp_dir(), 'arinode-openssl-');
     file_put_contents($temp, "[req]\ndistinguished_name=dn\nreq_extensions=ext\n[dn]\n[ext]\nsubjectAltName=DNS:*.554733.xyz,IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth\n");
     try {
-        $options = ['config'=>$temp, 'digest_alg'=>'sha256', 'private_key_type'=>OPENSSL_KEYTYPE_EC, 'curve_name'=>'prime256v1', 'x509_extensions'=>'ext'];
+        $options = ['config'=>$temp, 'digest_alg'=>'sha256', 'private_key_type'=>OPENSSL_KEYTYPE_EC, 'private_key_bits'=>2048, 'curve_name'=>'prime256v1', 'x509_extensions'=>'ext'];
         $private = openssl_pkey_new($options);
         $csr = openssl_csr_new(['commonName'=>'*.554733.xyz'], $private, $options);
         $certificate = openssl_csr_sign($csr, null, $private, 1, $options);
