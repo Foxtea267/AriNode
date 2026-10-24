@@ -11,7 +11,21 @@
 | 11:22:26 | 11:17:23 | `a215f53badf1d23de317cf54383ba97d8afbdf469c1d8b593e7bfadc7311cefb` |
 | 11:23:06 | 11:17:53 | `1e8d02493723c78746f51d2bd66929871f67097c0c31e555565039883613c4a3` |
 
-旧 GetNodeInfo 按整个 HTTP 响应原始字节计算 hash，空白、对象顺序、未使用的时间戳会被当成更新。在支持热路由更新的当前内核上，这未必必然重启 inbound；实机究竟由哪个字段、绑定发现或进程退出触发，仍需结合其版本、连续 API 响应指纹及日志确认。指定 XBoard `4f48e61` 的构建函数本身没有每次随机生成 padding 或附加时间戳，不能把这些猜测当成已证实根因。
+旧 GetNodeInfo 按整个 HTTP 响应原始字节计算 hash，空白、对象顺序、未使用的时间戳会被当成更新。在支持热路由更新的当前内核上，这未必必然重启 inbound，应结合版本、连续 API 响应指纹及日志定位。指定 XBoard `4f48e61` 的构建函数本身没有每次随机生成 padding 或附加时间戳，不能把这些猜测当成已证实根因；本次实机确认的循环原因见下文。
+
+### 后续实机定位：失败重试与恢复造成重签
+
+2026-10-24 获得节点机访问后，确认其旧版本是 `20261012-302e5629`。节点 244 的连续两次 config 响应相隔 35 秒，**逐字节相同**，SHA-256 都为 `ca3825c8d9af74bfaf320d59d6bfdec47a212674114953693fb6d900cb252c01`。实际响应包含有效 content 证书，`allow_insecure=false`，SNI 此时已经为空。
+
+该版本 `api/panel/node.go` 的 CommonNode 不接收 cert_config，`core/sing/node.go:147` 因而拒绝新节点的自动自签。旧 `node/task.go` 在删除旧 inbound 后才尝试 AddNode，失败则用旧 NodeInfo 再次 AddNode；旧信息允许自签，于是 `core/sing/node.go:151` 每次恢复都重新签发。待更新的配置继续重试，形成以下真实日志（UTC）：
+
+```text
+12:10:04 level=error msg="Node reload failed; will retry" error="add new node: TLS requires CertConfig (file, http, dns or self); panel does not allow an automatic self-signed certificate" node=anytls:244
+12:10:35 level=error msg="Node reload failed; will retry" error="add new node: TLS requires CertConfig (file, http, dns or self); panel does not allow an automatic self-signed certificate" node=anytls:244
+12:11:05 level=error msg="Node reload failed; will retry" error="add new node: TLS requires CertConfig (file, http, dns or self); panel does not allow an automatic self-signed certificate" node=anytls:244
+```
+
+上面只缩短了节点运行标识，没有打印 API 密钥或用户标识。此次循环的直接原因已经确认是**证书被忽略后，新配置加载失败、旧配置恢复重签**；不是 API 随机字段或 systemd 不断重启。修复先准备/校验证书，再移除旧 inbound，并在失败恢复时复用旧 runtime certificate paths。
 
 ## Agent 行为
 
@@ -65,6 +79,21 @@ docker restart YOUR_XBOARD_CONTAINER
 自动测试覆盖：证书解码、元数据变化、换行/别名、600 权限、mtime 不变、错误私钥、轮换仅一次、machine 模板不变、失败恢复旧路径、自签复用、本地 self/file 兼容。
 
 真实 sing-box 内核集成测试针对 AnyTLS/HY2/TUIC：客户端开启校验、信任本地测试 CA，加载完整四证书链，认证后转发 HTTP，换证后重新连接。测试 CA 不等同于生产 Let's Encrypt；生产仍需部署后验收。
+
+### 已部署版本与生产验收
+
+节点已从 `20261012-302e5629` 升级至正式版 [`20261024-28223ff8`](https://github.com/Foxtea267/AriNode/releases/tag/20261024-28223ff8)，升级前保留了旧程序和配置的受限备份。没有改动面板数据库或节点绑定。
+
+- `12:12:34 UTC`，节点 244 日志显示 `TLS certificate active cert_source=panel`，叶证书 SHA-256 为 `a1eb6d38eb41ac477f7afa96203aa98057e1de09e79e0fda4a668957a8daf6b2`，issuer 是 Let's Encrypt YE1。
+- 本机 OpenSSL 严格验证证书链和 `jp1.554733.xyz`，返回 `Verification: OK` / `Verify return code: 0 (ok)`。
+- 公网严格 TLS 采样运行五分钟（UTC 12:12:48 至 12:17:47，11 次握手），全部校验成功，SHA-256 完全相同；服务端实际发送四张证书。
+- 实际 AnyTLS 客户端通过公网 `2021.luneza.cc:25331` 认证；TLS `insecure=false`，HTTPS IP 查询成功，出口为 `142.91.108.202`。用户凭据只在内存中传递，没有打印或写入测试配置文件。
+- content 和 self 模式缓存的证书/私钥均为 600，复查时内容和 mtime 均未改变；节点 244、259、260 启动后各仅记录一次证书加载，reload_success=0、reload_failure=0，进程 PID 保持不变。
+- Linux CI 的默认/完整内核测试及 XBoard PHP 补丁测试通过。Windows 完整内核测试曾在 `trojan-httpupgrade` 出现间歇 EOF，单项重跑通过；未删除或放宽测试。
+
+仍需区分两个面板问题：244 当前 SNI 为空，应设置为证书覆盖的具体名称并刷新订阅；261 与 244 使用相同的 TCP 25331，启动失败日志明确为 address already in use。261 的失败被隔离，不会撤销 244 的监听。261 使用的 Cloudflare Origin CA 证书也不是普通客户端默认信任的公共 CA 证书。
+
+上述实机访问是节点机权限，**尚未在面板主机应用 PHP 核心补丁**；分享链接的 `security=tls` 和保存时 SAN 校验仍需部署该补丁。生产换证的“一周期只 reload 一次”也尚未通过修改真实面板证书验收；已有完整内核自动测试覆盖，不能把自动测试写成生产已完成的换证试验。
 
 ```bash
 openssl s_client -connect 2021.luneza.cc:25331 \
