@@ -53,12 +53,22 @@ debug 级别下，每次 200 响应还有 response_hash、config_hash、changed�
 
 1. ServerService：关联数组稳定排序，路由/padding 列表顺序保留。
 2. ServerSave：content 保存前校验证书配对、有效期和 SNI/SAN，不匹配返回明确验证错误并阻止保存；只编辑 SNI 也检查已有证书。
-3. General::buildAnyTLS：分享链接加入 security=tls。
+3. General::buildAnyTLS：分享链接额外加入 security=tls，作为客户端兼容参数。AnyTLS 官方 URI 格式不要求此参数，客户端可以根据 anytls 协议直接启用 TLS；缺少此参数不代表使用明文。
 4. 新增小工具类 App\Support\NodeTlsConfig。
 
 不修改 MySQL 表、节点 ID、machine 记录或密钥，也不自动修改现有 SNI。
 
-**第二个问题要另外纠正：** `*.554733.xyz` 覆盖 `jp1.554733.xyz`，不覆盖 `jp1.standard.novonet.node.554733.xyz`。把面板 SNI 改为证书覆盖的名字，或更换含原 SNI 的证书。拨号地址仍可为 `2021.luneza.cc:25331`；客户端需要刷新订阅，不应跳过验证。
+**SNI 可以留空，但默认校验名仍须匹配证书。** sing-box 客户端在 server_name 留空时使用 server 地址作为校验名；填写域名时通常也会自动作为握手 SNI。AriNode 加载 content 证书不要求面板填写 SNI，面板补丁也允许该字段为空。客户端禁用 SNI 扩展和不填写自定义 SNI 是不同设置，禁用扩展本身不会免除证书名称校验。
+
+| 客户端节点地址 | 证书 SAN | 留空自定义 SNI、开启证书校验 |
+| --- | --- | --- |
+| jp1.554733.xyz | *.554733.xyz | 名称匹配，可以留空 |
+| 2021.luneza.cc | *.554733.xyz | 名称不匹配，需要指定证书内名称，或给该地址配置匹配证书 |
+| jp1.standard.novonet.node.554733.xyz | *.554733.xyz | 名称不匹配，通配符只覆盖一级子域名 |
+
+本例可将客户端地址改成解析至相同入口的证书内域名并留空 SNI，或保留拨号地址 `2021.luneza.cc:25331`、显式设置 SNI 为 `jp1.554733.xyz`，或更换包含 `2021.luneza.cc` 的证书。涉及订阅字段的修改后需刷新订阅。TLS 已启用并不代表名称校验已经通过。
+
+参考：[AnyTLS 官方 URI 格式](https://github.com/anytls/anytls-go/blob/main/docs/uri_scheme.md)、[sing-box 默认 server_name 实现](https://github.com/SagerNet/sing-box/blob/v1.12.12/common/tls/std_client.go#L61)。
 
 先备份源码文件、确认容器名称，再在 `/www` 应用：
 
@@ -91,7 +101,7 @@ docker restart YOUR_XBOARD_CONTAINER
 - content 和 self 模式缓存的证书/私钥均为 600，复查时内容和 mtime 均未改变；节点 244、259、260 启动后各仅记录一次证书加载，reload_success=0、reload_failure=0，进程 PID 保持不变。
 - Linux CI 的默认/完整内核测试及 XBoard PHP 补丁测试通过。Windows 完整内核测试曾在 `trojan-httpupgrade` 出现间歇 EOF，单项重跑通过；未删除或放宽测试。
 
-仍需区分两个面板问题：244 当前 SNI 为空，应设置为证书覆盖的具体名称并刷新订阅；261 与 244 使用相同的 TCP 25331，启动失败日志明确为 address already in use。261 的失败被隔离，不会撤销 244 的监听。261 使用的 Cloudflare Origin CA 证书也不是普通客户端默认信任的公共 CA 证书。
+仍需区分两个面板问题：244 当前 SNI 为空，若客户端继续使用 2021.luneza.cc 且开启证书校验，需要按上表解决地址与证书名称不匹配；261 与 244 使用相同的 TCP 25331，启动失败日志明确为 address already in use。261 的失败被隔离，不会撤销 244 的监听。261 使用的 Cloudflare Origin CA 证书也不是普通客户端默认信任的公共 CA 证书。
 
 上述实机访问是节点机权限，**尚未在面板主机应用 PHP 核心补丁**；分享链接的 `security=tls` 和保存时 SAN 校验仍需部署该补丁。生产换证的“一周期只 reload 一次”也尚未通过修改真实面板证书验收；已有完整内核自动测试覆盖，不能把自动测试写成生产已完成的换证试验。
 
