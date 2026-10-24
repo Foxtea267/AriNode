@@ -3,6 +3,7 @@
     const $ = id => document.getElementById(id);
     let token = '', page = 1, total = 0, rows = [], nodes = [], editing = null, deploying = null;
     let commandRequest = 0, saving = false;
+    let updateInfo = null, checkingUpdate = false, installingUpdate = false, updateRequest = 0;
     const selected = new Set();
     function notice(message, error = false) {
         $('notice').textContent = message; $('notice').hidden = !message;
@@ -21,7 +22,7 @@
         if (!response.ok) {
             if (response.status === 401 || response.status === 403) {
                 $('auth').hidden = false; $('workspace').hidden = true;
-                $('server-dialog').close(); $('deployment').close(); invalidateCommand();
+                $('server-dialog').close(); $('deployment').close(); $('plugin-update').close(); invalidateCommand();
             }
             throw new Error(Object.values(data.errors || {}).flat().join('；') || data.message || '请求失败（' + response.status + '）');
         }
@@ -168,6 +169,47 @@
         for (const id of ['save-server', 'close-server', 'cancel-server']) $(id).disabled = value;
         $('save-server').textContent = value ? '正在保存…' : '保存并生成部署命令';
     }
+    async function checkUpdate() {
+        if (checkingUpdate || installingUpdate) return;
+        checkingUpdate = true; updateInfo = null; const request = ++updateRequest;
+        $('check-update').disabled = true; $('install-update').disabled = true;
+        $('update-latest').textContent = '—'; errorAt('update-error');
+        $('update-status').textContent = '正在检查官方版本…';
+        try {
+            const response = await api('update');
+            if (request !== updateRequest || !$('plugin-update').open) return;
+            updateInfo = response.data;
+            $('update-current').textContent = updateInfo.current_version;
+            $('update-latest').textContent = updateInfo.latest_version;
+            $('install-update').disabled = !updateInfo.available;
+            $('update-status').textContent = updateInfo.available ? '发现新版本，可以立即更新。来源：' + updateInfo.source : '当前已是最新版本。';
+        } catch (e) { if (request === updateRequest) { $('update-status').textContent = ''; errorAt('update-error', e.message); } }
+        finally { checkingUpdate = false; $('check-update').disabled = false; }
+    }
+    $('open-update').addEventListener('click', () => {
+        $('update-current').textContent = document.querySelector('.version').textContent;
+        $('plugin-update').showModal(); if ($('reload-update').hidden) checkUpdate();
+    });
+    $('check-update').addEventListener('click', checkUpdate);
+    $('close-update').addEventListener('click', () => { if (!installingUpdate) $('plugin-update').close(); });
+    $('plugin-update').addEventListener('cancel', event => { if (installingUpdate) event.preventDefault(); });
+    $('plugin-update').addEventListener('close', () => { updateRequest++; updateInfo = null; });
+    $('reload-update').addEventListener('click', () => location.reload());
+    $('install-update').addEventListener('click', async () => {
+        if (!updateInfo?.available || installingUpdate || saving) return;
+        installingUpdate = true; $('install-update').disabled = true;
+        $('close-update').disabled = true; $('check-update').disabled = true; errorAt('update-error');
+        $('update-status').textContent = '正在下载、校验、备份并更新插件，请稍候…';
+        try {
+            const response = await api('update', {version: updateInfo.latest_version, commit: updateInfo.commit});
+            $('update-current').textContent = response.data.version;
+            $('update-status').textContent = '更新成功。旧版备份编号：' + response.data.backup + '。刷新页面加载新版。';
+            if (response.data.warning) errorAt('update-error', response.data.warning);
+            $('install-update').hidden = true; $('check-update').hidden = true; $('reload-update').hidden = false;
+        } catch (e) {
+            $('update-status').textContent = '请重新检查版本，确认当前状态后重试。'; errorAt('update-error', e.message);
+        } finally { installingUpdate = false; updateInfo = null; $('close-update').disabled = false; $('check-update').disabled = false; }
+    });
     $('server-form').addEventListener('submit', async event => {
         event.preventDefault(); if (saving) return;
         if (!selected.size) { errorAt('server-error', '请至少选择一个节点。'); return; }

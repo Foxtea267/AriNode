@@ -4,8 +4,11 @@ use Illuminate\Support\Facades\Route;
 use Plugin\AriNode\Controllers\ProvisionController;
 use Plugin\AriNode\Controllers\ClusterController;
 use Plugin\AriNode\Controllers\AdminController;
+use Plugin\AriNode\Controllers\UpdateController;
 
 Route::middleware('admin')->group(function () {
+    Route::get('/api/v1/arinode/admin/update', [UpdateController::class, 'check']);
+    Route::post('/api/v1/arinode/admin/update', [UpdateController::class, 'install']);
     Route::get('/api/v1/arinode/admin/entry', [AdminController::class, 'entry']);
     Route::get('/api/v1/arinode/admin/servers', [AdminController::class, 'servers']);
     Route::get('/api/v1/arinode/admin/nodes', [AdminController::class, 'nodes']);

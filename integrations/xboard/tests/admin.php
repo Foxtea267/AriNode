@@ -115,11 +115,14 @@ namespace {
     require __DIR__ . '/../AriNode/routes/web.php';
     $routes = [];
     foreach ($router->getRoutes() as $route) { $routes['/' . $route->uri()] = $route; }
-    foreach (['/api/v1/arinode/admin/entry','/api/v2/test-admin/plugin/ari-node/entry','/api/v1/arinode/admin/servers','/api/v1/arinode/admin/nodes','/api/v1/arinode/admin/servers/save','/api/v1/arinode/admin/command',
+    foreach (['/api/v1/arinode/admin/update','/api/v1/arinode/admin/entry','/api/v2/test-admin/plugin/ari-node/entry','/api/v1/arinode/admin/servers','/api/v1/arinode/admin/nodes','/api/v1/arinode/admin/servers/save','/api/v1/arinode/admin/command',
         '/api/v2/test-admin/plugin/ari-node/servers/fetch','/api/v2/test-admin/plugin/ari-node/servers/save','/api/v2/test-admin/plugin/ari-node/nodes/fetch'] as $path) {
         check(in_array('admin', $routes[$path]->gatherMiddleware(), true), "Unprotected data route {$path}");
     }
     check($routes['/arinode/admin']->methods() === ['GET', 'HEAD'], 'HTML shell route missing');
+    $updateRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/update');
+    check(count($updateRoutes) === 2, 'Update must provide separate GET check and POST install routes');
+    foreach ($updateRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected update route'); }
     $testAdminPath = '';
     require __DIR__ . '/../AriNode/routes/api.php';
     $emptyPath = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v2/plugin/ari-node/servers/fetch');

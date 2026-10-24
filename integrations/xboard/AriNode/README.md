@@ -1,6 +1,16 @@
 # AriNode 服务器管理
 
-插件版本 **0.4.3**。安装 / 升级后启用插件，并刷新 XBoard 管理员后台。
+插件版本 **0.5.0**。安装 / 升级后启用插件，并刷新 XBoard 管理员后台。
+
+### 页面内更新
+
+首次升级到 0.5.0 仍需上传本插件 ZIP。此后在 `/arinode/admin` 点击“插件更新”，检查版本后点击“立即更新”，最后刷新页面即可。
+
+更新源固定为 `Foxtea267/AriNode` 的 main 分支发布包。后端将更新清单与 ZIP 固定到同一 Git 提交，校验版本、包身份、大小及 SHA-256，再调用 XBoard 原生 `PluginManager::update`。不接受自定义下载地址，不自动降级，不定时自动安装。仅管理员可检查和安装，浏览器凭证不会发给 GitHub。
+
+更新会保留 XBoard 中的服务器、节点绑定、机器密钥及插件配置。旧文件保存在 `<XBoard>/plugins/.arinode-updates/<备份编号>/backup`；失败时自动恢复文件与插件数据库状态，不卸载插件。不支持包含数据库迁移的更新包，这类版本需走 XBoard 手动升级流程。备份需由管理员按需要清理。
+
+要求 PHP cURL / ZIP 扩展、面板能访问 GitHub API 与 raw.githubusercontent.com，且 PHP 运行用户可写插件父目录。在线更新同时清理视图和路由缓存；检测到 Octane 时尝试平滑重载工作进程，失败会明确提示执行 `php artisan octane:reload`。其他自定义常驻 PHP 容器需自行重载。此功能不更新各 VPS 上的 AriNode / anctl。
 
 ## 内置页面
 

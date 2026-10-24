@@ -47,6 +47,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 h1 { margin:0 0 6px; font-size:28px; line-height:1.2; letter-spacing:-.035em; font-weight:700; }
 .heading p,.auth p { margin:0; color:var(--ui-muted); font-size:12px; }
 .heading-actions { display:flex; gap:8px; flex:none; }
+.update-versions { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px; }
+.update-versions span { display:block; color:var(--ui-muted); font-size:12px; }
+.update-versions strong { display:block; margin-top:6px; font-size:22px; font-weight:650; }
 .button { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:34px; padding:7px 12px; border:1px solid var(--ui-primary); border-radius:7px; background:var(--ui-primary); color:var(--ui-primary-fg); font-size:12px; font-weight:600; white-space:nowrap; }
 .button:hover:not(:disabled) { filter:brightness(.88); }
 .button.subtle { background:var(--ui-surface); color:var(--ui-fg); border-color:var(--ui-border); }

@@ -11,7 +11,7 @@
 </head>
 <body>
 <header class="topbar">
-    <div class="brand">AriNode <span class="version">0.4.3</span></div>
+    <div class="brand">AriNode <span class="version">0.5.0</span></div>
     <div class="topbar-tools"><button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题"></button></div>
 </header>
 <main class="shell">
@@ -22,7 +22,7 @@
     </section>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
     <section id="workspace" hidden>
-        <div class="heading"><div><h1>服务器管理</h1><p>管理服务器、节点绑定与部署命令。</p></div><div class="heading-actions"><button id="refresh" class="button subtle" type="button">刷新</button><button id="new-server" class="button" type="button"><span aria-hidden="true">＋</span> 添加服务器</button></div></div>
+        <div class="heading"><div><h1>服务器管理</h1><p>管理服务器、节点绑定与部署命令。</p></div><div class="heading-actions"><button id="open-update" class="button subtle" type="button">插件更新</button><button id="refresh" class="button subtle" type="button">刷新</button><button id="new-server" class="button" type="button"><span aria-hidden="true">＋</span> 添加服务器</button></div></div>
         <section class="stats" aria-label="服务器概览">
             <div class="stat"><span>服务器总数</span><strong id="stat-servers">—</strong><small>按当前名称搜索结果统计</small></div>
             <div class="stat"><span>可用节点</span><strong id="stat-nodes">—</strong><small>已启用且受 AriNode 支持</small></div>
@@ -64,6 +64,16 @@
         <div class="deployment-note">命令包含此服务器的专属密钥。已有 AriNode 配置会先备份再替换；迁移旧程序请使用对应的迁移命令。</div>
     </div>
     <div class="dialog-footer"><button id="done-deployment" class="button subtle" type="button">完成</button><button id="copy-command" class="button" type="button" disabled>复制命令</button></div>
+</dialog>
+<dialog id="plugin-update" aria-labelledby="update-title">
+    <div class="dialog-heading"><div><h2 id="update-title">插件更新</h2><p>从 Foxtea267/AriNode 官方仓库检查并安装更新。</p></div><button id="close-update" class="icon-button" type="button" aria-label="关闭插件更新">×</button></div>
+    <div class="dialog-body">
+        <div class="update-versions"><div><span>当前版本</span><strong id="update-current">—</strong></div><div><span>最新版本</span><strong id="update-latest">—</strong></div></div>
+        <p id="update-status" class="field-help" role="status" aria-live="polite">点击“检查更新”获取官方版本。</p>
+        <p id="update-error" class="form-error" role="alert" hidden></p>
+        <div class="deployment-note">更新前自动校验安装包并备份旧插件，失败时恢复旧文件和状态。服务器、节点绑定及密钥会保留；此操作仅更新 XBoard 插件。</div>
+    </div>
+    <div class="dialog-footer"><button id="check-update" class="button subtle" type="button">检查更新</button><button id="install-update" class="button" type="button" disabled>立即更新</button><button id="reload-update" class="button" type="button" hidden>刷新页面</button></div>
 </dialog>
 <script>@include('AriNode::admin-theme')</script>
 <script>@include('AriNode::admin-script')</script>

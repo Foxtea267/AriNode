@@ -26,7 +26,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: mbstring, pdo_sqlite
+          extensions: mbstring, pdo_sqlite, zip, curl
           tools: composer
       - name: Validate Xboard plugin and node group reports
         run: |
@@ -34,6 +34,8 @@ jobs:
           php integrations/xboard/tests/cluster.php
           composer install --working-dir=integrations/xboard/tests --no-interaction --prefer-dist --no-progress
           php integrations/xboard/tests/admin.php
+          php integrations/xboard/tests/update.php
+          python3 scripts/package-xboard-plugin.py --check
           node --check < integrations/xboard/AriNode/resources/views/admin-script.blade.php
           node --check < integrations/xboard/AriNode/resources/views/admin-theme.blade.php
 

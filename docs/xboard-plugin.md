@@ -2,7 +2,19 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.4.3** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.5.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+
+## 页面内一键更新插件
+
+第一次需手动安装 0.5.0；之后打开 `/arinode/admin` → **插件更新** → **检查更新** → **立即更新**。完成后点击“刷新页面”。检查/安装失败会显示原因；若浏览器请求中断，请重新检查当前版本后再重试。
+
+安装源固定为官方仓库 main 分支的 `dist/arinode-xboard-plugin.zip` 和 `dist/xboard-plugin-update.json`，两者从同一个不可变 Git 提交读取。校验 SHA-256、包大小、插件标识和版本后，先备份再调用 XBoard 原生升级；同一实例同时只允许一个升级任务，不允许降级。不下载任意 URL，也不会把管理员凭证发送到 GitHub。
+
+服务器记录、绑定和密钥保存在 XBoard 数据库中，更新不会卸载或重建。更新失败会恢复插件文件、版本、启用状态和配置。旧版保存在 `<XBoard>/plugins/.arinode-updates/<备份编号>/backup`，可按需保留或清理。包含数据库迁移的包要求手动升级，避免不可逆 DDL 导致无法回滚。
+
+面板 PHP 需启用 cURL 和 ZIP，运行用户需能写插件父目录，网络需能访问 GitHub API 和 raw.githubusercontent.com。自动清理 Blade/路由缓存；Octane 使用平滑 reload，若无法自动重载会给出命令提示。自定义常驻 PHP 服务需要自行重载。插件更新不影响 VPS 上 AriNode 的程序版本。
+
+维护者修改插件后运行 `python3 scripts/package-xboard-plugin.py` 同步生成 ZIP 和校验清单；CI 会检查两者与源码一致。
 
 无需运行数据库迁移：服务器列表复用 XBoard 的 `ServerMachine` 和节点的 `machine_id`，已有机器记录也会显示。此功能要求支持原生机器管理的新版 XBoard；后台侧栏入口还要求该后台支持 `admin_menus` / `admin_crud`。不支持侧栏扩展的后台仍可使用下面的内置页面。
 
