@@ -124,6 +124,7 @@ type Options struct {
 	SingOptions            *SingOptions    `json:"SingOptions"`
 	Hysteria2ConfigPath    string          `json:"Hysteria2ConfigPath"`
 	CertConfig             *CertConfig     `json:"CertConfig"`
+	CertStorePath          string          `json:"CertStorePath,omitempty"`
 }
 
 func (o *Options) UnmarshalJSON(data []byte) error {

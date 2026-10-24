@@ -1,5 +1,9 @@
 # AriNode
 
+## 面板 TLS 证书与 AnyTLS / HY2 / TUIC
+
+支持 XBoard `cert_config` 的 content / file 等模式；content 证书按绑定隔离、校验并以 600 权限幂等落盘，无变化不重载，auto 自签持久化复用。另提供 XBoard `4f48e61` 的最小配套补丁，补齐 AnyTLS `security=tls` 和保存时的 SNI/SAN 校验。[根因、部署、验收与回滚](docs/panel-certificates.md)。
+
 ## V2bX 一键安装、迁移并卸载
 
 ```sh

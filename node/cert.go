@@ -12,11 +12,20 @@ import (
 	"time"
 
 	"github.com/Foxtea267/AriNode/common/file"
+	"github.com/Foxtea267/AriNode/conf"
 	log "github.com/sirupsen/logrus"
 )
 
 func (c *Controller) renewCertTask() error {
-	l, err := NewLego(c.CertConfig)
+	options := c.runtimeOptions.Load()
+	if options == nil || options.CertConfig == nil {
+		return nil
+	}
+	config := options.CertConfig
+	if config.CertMode != "dns" && config.CertMode != "http" {
+		return nil
+	}
+	l, err := NewLego(config)
 	if err != nil {
 		log.WithField("tag", c.tag).Info("new lego error: ", err)
 		return nil
@@ -29,21 +38,21 @@ func (c *Controller) renewCertTask() error {
 	return nil
 }
 
-func (c *Controller) requestCert() error {
-	switch c.CertConfig.CertMode {
+func (c *Controller) requestCert(config *conf.CertConfig) error {
+	switch config.CertMode {
 	case "none", "", "auto":
 	case "file":
-		if c.CertConfig.CertFile == "" || c.CertConfig.KeyFile == "" {
+		if config.CertFile == "" || config.KeyFile == "" {
 			return fmt.Errorf("cert file path or key file path not exist")
 		}
 	case "dns", "http":
-		if c.CertConfig.CertFile == "" || c.CertConfig.KeyFile == "" {
+		if config.CertFile == "" || config.KeyFile == "" {
 			return fmt.Errorf("cert file path or key file path not exist")
 		}
-		if file.IsExist(c.CertConfig.CertFile) && file.IsExist(c.CertConfig.KeyFile) {
+		if file.IsExist(config.CertFile) && file.IsExist(config.KeyFile) {
 			return nil
 		}
-		l, err := NewLego(c.CertConfig)
+		l, err := NewLego(config)
 		if err != nil {
 			return fmt.Errorf("create lego object error: %s", err)
 		}
@@ -52,21 +61,21 @@ func (c *Controller) requestCert() error {
 			return fmt.Errorf("create lego cert error: %s", err)
 		}
 	case "self":
-		if c.CertConfig.CertFile == "" || c.CertConfig.KeyFile == "" {
+		if config.CertFile == "" || config.KeyFile == "" {
 			return fmt.Errorf("cert file path or key file path not exist")
 		}
-		if file.IsExist(c.CertConfig.CertFile) && file.IsExist(c.CertConfig.KeyFile) {
+		if file.IsExist(config.CertFile) && file.IsExist(config.KeyFile) {
 			return nil
 		}
 		err := generateSelfSslCertificate(
-			c.CertConfig.CertDomain,
-			c.CertConfig.CertFile,
-			c.CertConfig.KeyFile)
+			config.CertDomain,
+			config.CertFile,
+			config.KeyFile)
 		if err != nil {
 			return fmt.Errorf("generate self cert error: %s", err)
 		}
 	default:
-		return fmt.Errorf("unsupported certmode: %s", c.CertConfig.CertMode)
+		return fmt.Errorf("unsupported certmode: %s", config.CertMode)
 	}
 	return nil
 }

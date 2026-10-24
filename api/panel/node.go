@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Foxtea267/AriNode/common/cert"
 	"github.com/Foxtea267/AriNode/common/nodepolicy"
+	"github.com/sirupsen/logrus"
 
 	"encoding/json"
 )
@@ -31,6 +33,7 @@ type NodeInfo struct {
 	Rules        Rules
 	TLSSettings  NativeTLSSettings
 	Policy       nodepolicy.Policy
+	ConfigHash   string `json:"-"`
 
 	// origin
 	VAllss      *VAllssNode
@@ -51,6 +54,7 @@ type NativeTLSSettings struct {
 }
 
 type CommonNode struct {
+	CertConfig       *cert.PanelConfig            `json:"cert_config,omitempty"`
 	CustomOutbounds  []nodepolicy.OutboundConfig  `json:"custom_outbounds,omitempty"`
 	CustomRoutes     []map[string]any             `json:"custom_routes,omitempty"`
 	CustomRouteRules []nodepolicy.CustomRouteRule `json:"custom_route_rules,omitempty"`
@@ -251,11 +255,6 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	if r.StatusCode() == 304 {
 		return nil, nil
 	}
-	hash := sha256.Sum256(r.Body())
-	newBodyHash := hex.EncodeToString(hash[:])
-	if c.responseBodyHash == newBodyHash {
-		return nil, nil
-	}
 
 	if r != nil {
 		defer func() {
@@ -420,6 +419,9 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	if cm.BaseConfig == nil {
 		cm.BaseConfig = &BaseConfig{}
 	}
+	if node.TLSSettings.ServerName == "" {
+		node.TLSSettings.ServerName = cm.ServerName
+	}
 
 	// parse rules and dns
 	for i := range cm.Routes {
@@ -476,8 +478,25 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	}
 	// clear
 	cm.BaseConfig = nil
-	c.responseBodyHash = newBodyHash
+	// Hash the decoded, normalized runtime model: map ordering, whitespace and
+	// unknown response metadata cannot restart an inbound. Real padding/cert/routing
+	// changes remain meaningful and must not be stripped as supposedly volatile.
+	canonical, err := json.Marshal(node)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize node configuration: %w", err)
+	}
+	hash := sha256.Sum256(canonical)
+	newBodyHash := hex.EncodeToString(hash[:])
+	responseHash := sha256.Sum256(r.Body())
+	logrus.WithFields(logrus.Fields{"node_id": node.Id, "response_hash": hex.EncodeToString(responseHash[:]), "config_hash": newBodyHash,
+		"changed": c.responseBodyHash != newBodyHash}).Debug("Panel configuration fingerprints")
 	c.nodeEtag = r.Header().Get("ETag")
+	if c.responseBodyHash == newBodyHash {
+		return nil, nil
+	}
+	logrus.WithFields(logrus.Fields{"node_id": node.Id, "config_hash": newBodyHash, "previous_hash": c.responseBodyHash}).Debug("Normalized panel configuration changed")
+	c.responseBodyHash = newBodyHash
+	node.ConfigHash = newBodyHash
 
 	return node, nil
 }

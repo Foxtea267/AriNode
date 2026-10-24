@@ -68,6 +68,7 @@ func (n *NodeInfo) LimiterRules() *Rules {
 
 func (n *NodeInfo) inboundView() NodeInfo {
 	v := *n
+	v.ConfigHash = ""
 	v.Policy = nodepolicy.Policy{}
 	v.Rules = Rules{}
 	v.PullInterval = 0

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -70,7 +71,11 @@ func checkPath(p string) error {
 func (l *Lego) SetProvider() error {
 	switch l.config.CertMode {
 	case "http":
-		err := l.client.Challenge.SetHTTP01Provider(http01.NewProviderServer("", "80"))
+		port := l.config.HTTPPort
+		if port == 0 {
+			port = 80
+		}
+		err := l.client.Challenge.SetHTTP01Provider(http01.NewProviderServer("", strconv.Itoa(port)))
 		if err != nil {
 			return err
 		}
@@ -159,11 +164,11 @@ func (l *Lego) writeCert(certificates *certificate.Resource) error {
 	if err != nil {
 		return fmt.Errorf("check path error: %s", err)
 	}
-	err = os.WriteFile(l.parseParams(l.config.KeyFile), certificates.PrivateKey, 0644)
+	err = os.WriteFile(l.parseParams(l.config.KeyFile), certificates.PrivateKey, 0600)
 	if err != nil {
 		return err
 	}
-	return nil
+	return os.Chmod(l.parseParams(l.config.KeyFile), 0600)
 }
 
 type User struct {

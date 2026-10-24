@@ -1,5 +1,9 @@
 # AriNode
 
+### Panel TLS certificates
+
+XBoard `cert_config` content/file settings now reach TLS inbounds, including AnyTLS, HY2 and TUIC. Content is validated, stored with private permissions and reused without rewriting unchanged files; automatic self-signed certificates persist across reloads. A small companion patch for XBoard `4f48e61` adds AnyTLS `security=tls`, stable config maps and SNI/SAN save validation. [Diagnosis, deployment, verification and rollback](docs/panel-certificates.md).
+
 AriNode is a V2bX based node service with Xboard provisioning and Komari status integration. It retains the V2bX sing-box, Xray and Hysteria2 cores and uses Xboard's native UniProxy node API for configuration, users, traffic and alive reports. [中文说明](README.zh-CN.md).
 
 This repository starts from [V2bX](https://github.com/wyx2685/V2bX) commit `71277de69efbbc86c23ad8ae02b68efd174e5756` under MPL-2.0. The Xboard adapter was checked against [Xboard-Node](https://github.com/cedar2025/Xboard-Node) and [Xboard](https://github.com/cedar2025/Xboard). The Komari plugin follows the [Komari plugin SDK](https://github.com/komari-monitor/plugin-sdk).

@@ -3,6 +3,7 @@ package node
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/Foxtea267/AriNode/api/panel"
@@ -29,17 +30,13 @@ func (c *Controller) startTasks(node *panel.NodeInfo) {
 	log.WithField("tag", c.tag).Info("Start report node status")
 	_ = c.userReportPeriodic.Start(false)
 	if node.Security == panel.Tls {
-		switch c.CertConfig.CertMode {
-		case "none", "", "auto", "file", "self":
-		default:
-			c.renewCertPeriodic = &task.Task{
-				Interval: time.Hour * 24,
-				Execute:  c.renewCertTask,
-			}
-			log.WithField("tag", c.tag).Info("Start renew cert")
-			// delay to start renewCert
-			_ = c.renewCertPeriodic.Start(true)
+		c.renewCertPeriodic = &task.Task{
+			Interval: time.Hour * 24,
+			Execute:  c.renewCertTask,
 		}
+		log.WithField("tag", c.tag).Debug("Start TLS certificate maintenance")
+		// delay to start renewCert
+		_ = c.renewCertPeriodic.Start(true)
 	}
 	if c.LimitConfig.EnableDynamicSpeedLimit {
 		c.traffic = make(map[string]int64)
@@ -171,6 +168,15 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 		return fmt.Errorf("validate rule: %w", err)
 	}
 	if c.coreAdded && panel.InboundConfigEqual(c.info, next) {
+		if reflect.DeepEqual(c.info.Policy, next.Policy) {
+			if err := c.limiter.UpdateRule(next.LimiterRules()); err != nil {
+				return err
+			}
+			c.info, c.pendingNode = next, nil
+			c.configError.Store(false)
+			c.updateNodeIntervals(next)
+			return nil
+		}
 		if updater, ok := c.server.(vCore.NodePolicyUpdater); ok {
 			err := updater.UpdateNodePolicy(c.tag, next, c.Options)
 			if err == nil {
@@ -189,10 +195,13 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 			}
 		}
 	}
-	if next.Security == panel.Tls {
-		if err := c.requestCert(); err != nil {
-			return fmt.Errorf("request cert: %w", err)
-		}
+	options, material, source, err := c.prepareNodeOptions(next)
+	if err != nil {
+		return fmt.Errorf("prepare TLS certificate: %w", err)
+	}
+	oldOptions := c.runtimeOptions.Load()
+	if oldOptions == nil {
+		oldOptions = c.Options
 	}
 	oldTag, oldInfo, oldUsers := c.tag, c.info, c.userList
 	newTag := oldTag
@@ -207,7 +216,7 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 	}
 	restore := func(cause error) error {
 		if oldInfo != nil {
-			if err := c.server.AddNode(oldTag, oldInfo, c.Options); err == nil {
+			if err := c.server.AddNode(oldTag, oldInfo, oldOptions); err == nil {
 				c.coreAdded = true
 				if _, userErr := c.server.AddUsers(&vCore.AddUsersParams{Tag: oldTag, Users: oldUsers, NodeInfo: oldInfo}); userErr != nil {
 					log.WithError(userErr).WithField("tag", oldTag).Error("Restore old users failed")
@@ -218,7 +227,7 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 		}
 		return cause
 	}
-	if err := c.server.AddNode(newTag, next, c.Options); err != nil {
+	if err := c.server.AddNode(newTag, next, options); err != nil {
 		return restore(fmt.Errorf("add new node: %w", err))
 	}
 	c.coreAdded = true
@@ -238,6 +247,8 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 		return fmt.Errorf("update rule: %w", err)
 	}
 	c.tag, c.info, c.userList, c.aliveMap = newTag, next, users, alive
+	c.runtimeOptions.Store(options)
+	c.logCertificate(next, material, source)
 	c.pendingNode = nil
 	c.configError.Store(false)
 	c.traffic = make(map[string]int64)

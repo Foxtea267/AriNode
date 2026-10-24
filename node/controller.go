@@ -28,6 +28,7 @@ type Controller struct {
 	info                      *panel.NodeInfo
 	pendingNode               *panel.NodeInfo
 	coreAdded                 bool
+	runtimeOptions            atomic.Pointer[conf.Options]
 	nodeInfoMonitorPeriodic   *task.Task
 	userReportPeriodic        *task.Task
 	renewCertPeriodic         *task.Task
@@ -83,14 +84,12 @@ func (c *Controller) Start() error {
 	}
 	c.limiter = l
 	l.SetAliveList(c.aliveMap, c.apiClient.AliveIPs)
-	if node.Security == panel.Tls {
-		err = c.requestCert()
-		if err != nil {
-			return fmt.Errorf("request cert error: %s", err)
-		}
+	options, material, source, err := c.prepareNodeOptions(node)
+	if err != nil {
+		return fmt.Errorf("prepare TLS certificate: %w", err)
 	}
 	// Add new tag
-	err = c.server.AddNode(c.tag, node, c.Options)
+	err = c.server.AddNode(c.tag, node, options)
 	if err != nil {
 		return fmt.Errorf("add new node error: %s", err)
 	}
@@ -105,6 +104,8 @@ func (c *Controller) Start() error {
 	}
 	log.WithField("tag", c.tag).Infof("Added %d new users", added)
 	c.info = node
+	c.runtimeOptions.Store(options)
+	c.logCertificate(node, material, source)
 	c.startTasks(node)
 	return nil
 }

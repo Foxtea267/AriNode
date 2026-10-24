@@ -9,6 +9,7 @@ type CertConfig struct {
 	Provider         string            `json:"Provider"` // alidns, cloudflare, gandi, godaddy....
 	Email            string            `json:"Email"`
 	DNSEnv           map[string]string `json:"DNSEnv"`
+	HTTPPort         int               `json:"HTTPPort,omitempty"`
 }
 
 func NewCertConfig() *CertConfig {
