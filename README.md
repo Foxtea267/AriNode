@@ -84,7 +84,7 @@ Import automatically queries Xboard for node types absent from the YAML and disc
 
 ## Xboard plugin
 
-Plugin **0.5.0** includes a server management page at `https://YOUR_PANEL/arinode/admin`, with a compact monochrome table, node directory, edit/deployment dialogs and light/dark themes. Sign in to the XBoard admin on the same origin, click **Add server**, enter its name, select existing nodes, then save. Copy the deployment command onto the target Linux server; panel URL, machine-specific token, node IDs, language and core are prefilled. The default core is sing-box. Compatible XBoard admin builds show native **Servers / Available nodes** plugin menus. [Page and deployment guide](docs/xboard-plugin.md).
+Plugin **0.5.1** includes a server management page at `https://YOUR_PANEL/arinode/admin`, with a compact monochrome table, node directory, edit/deployment dialogs and light/dark themes. Sign in to the XBoard admin on the same origin, click **Add server**, enter its name, select existing nodes, then save. Copy the deployment command onto the target Linux server; panel URL, machine-specific token, node IDs, language and core are prefilled. The default core is sing-box. Compatible XBoard admin builds show native **Servers / Available nodes** plugin menus. [Page and deployment guide](docs/xboard-plugin.md).
 
 After manually installing 0.5.0 once, use **插件更新** on that page to check and install official plugin packages. Downloads are pinned to one Git commit and verified before backup and native XBoard upgrade, with rollback on failure. Server bindings and keys are preserved. PHP cURL/ZIP and write access to the plugin directory are required; this updates the panel plugin only.
 

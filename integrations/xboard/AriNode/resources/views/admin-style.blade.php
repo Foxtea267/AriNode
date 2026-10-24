@@ -32,8 +32,9 @@ button { cursor:pointer; }
 button:disabled { opacity:.45; cursor:not-allowed; }
 button,input,select,textarea { transition:background-color .16s,border-color .16s,color .16s; }
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible { outline:2px solid var(--ui-ring); outline-offset:3px; }
-/* An opaque fixed header keeps text readable without backdrop-filter compositing on scroll. */
-.topbar { position:fixed; inset:0 0 auto; z-index:20; display:flex; align-items:center; justify-content:space-between; height:var(--ui-topbar-height); padding-inline:max(18px,calc((100% - 1320px)/2)); color:var(--ui-fg); background:var(--ui-bg); border-bottom:1px solid var(--ui-border); }
+/* Keep the glass on its own layer, with fixed, explicitly colored text above it. */
+.topbar { position:fixed; inset:0 0 auto; z-index:20; display:flex; align-items:center; justify-content:space-between; height:var(--ui-topbar-height); padding-inline:max(18px,calc((100% - 1320px)/2)); color:var(--ui-fg); }
+.topbar::before { content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background:var(--ui-bg); background:color-mix(in srgb,var(--ui-bg) 68%,transparent); -webkit-backdrop-filter:blur(18px) saturate(1.15); backdrop-filter:blur(18px) saturate(1.15); }
 .brand,.topbar-tools { display:flex; align-items:center; gap:10px; }
 .brand { color:var(--ui-fg); font-size:14px; font-weight:680; letter-spacing:-.02em; }
 .version { font-size:10px; color:var(--ui-muted); font-weight:500; border:1px solid var(--ui-border); border-radius:4px; padding:1px 5px; letter-spacing:0; }

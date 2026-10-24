@@ -1,7 +1,7 @@
 {
   "name": "AriNode 服务器管理",
   "code": "ari_node",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "服务器管理、节点绑定、一键部署与插件在线更新；页面：/arinode/admin",
   "author": "AriNode",
   "type": "feature",
