@@ -65,9 +65,9 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 			"tag": c.tag,
 			"err": err,
 		}).Error("Get user list failed")
-		return nil
-	}
-	if err := c.applyUserList(newU, nil); err != nil {
+		// Configuration delivery is independent of the user endpoint. Preserve
+		// current authorization on fetch failure, but still check node changes.
+	} else if err := c.applyUserList(newU, nil); err != nil {
 		c.apiClient.InvalidateUserCache()
 		log.WithError(err).WithField("tag", c.tag).Error("Apply user list failed; will retry full snapshot")
 		return nil
@@ -83,7 +83,7 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 	newN, err := c.apiClient.GetNodeInfo()
 	if err != nil {
 		c.configError.Store(true)
-		log.WithError(err).WithField("tag", c.tag).Error("Get node info failed; user authorization already synchronized")
+		log.WithError(err).WithField("tag", c.tag).Error("Get node info failed; retaining last valid configuration")
 		return nil
 	}
 	if newN == nil {
@@ -99,6 +99,7 @@ func (c *Controller) nodeInfoMonitor() (err error) {
 			log.WithError(err).WithField("tag", c.tag).Error("Node reload failed; will retry")
 		}
 	}
+	c.savePanelConfig(c.info)
 	return nil
 }
 
@@ -175,6 +176,7 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 			c.info, c.pendingNode = next, nil
 			c.configError.Store(false)
 			c.updateNodeIntervals(next)
+			c.savePanelConfig(next)
 			return nil
 		}
 		if updater, ok := c.server.(vCore.NodePolicyUpdater); ok {
@@ -187,6 +189,7 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 				c.pendingNode = nil
 				c.configError.Store(false)
 				c.updateNodeIntervals(next)
+				c.savePanelConfig(next)
 				log.WithField("node", c.tag).Info("Panel routing updated without restarting inbound")
 				return nil
 			}
@@ -249,6 +252,7 @@ func (c *Controller) reloadNode(next *panel.NodeInfo, users []panel.UserInfo, al
 	c.tag, c.info, c.userList, c.aliveMap = newTag, next, users, alive
 	c.runtimeOptions.Store(options)
 	c.logCertificate(next, material, source)
+	c.savePanelConfig(next)
 	c.pendingNode = nil
 	c.configError.Store(false)
 	c.traffic = make(map[string]int64)

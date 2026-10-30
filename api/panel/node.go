@@ -33,7 +33,9 @@ type NodeInfo struct {
 	Rules        Rules
 	TLSSettings  NativeTLSSettings
 	Policy       nodepolicy.Policy
-	ConfigHash   string `json:"-"`
+	ConfigHash   string          `json:"-"`
+	PanelManaged bool            `json:"-"`
+	RawConfig    json.RawMessage `json:"-"`
 
 	// origin
 	VAllss      *VAllssNode
@@ -242,13 +244,8 @@ type Rules struct {
 }
 
 func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
-	path := c.endpoint("config")
-	r, err := c.client.
-		R().
-		SetHeader("If-None-Match", c.nodeEtag).
-		ForceContentType("application/json").
-		Get(path)
-	if err = c.checkResponse(r, path, err); err != nil {
+	r, managed, err := c.nodeConfigResponse()
+	if err != nil {
 		return nil, err
 	}
 
@@ -491,12 +488,21 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	logrus.WithFields(logrus.Fields{"node_id": node.Id, "response_hash": hex.EncodeToString(responseHash[:]), "config_hash": newBodyHash,
 		"changed": c.responseBodyHash != newBodyHash}).Debug("Panel configuration fingerprints")
 	c.nodeEtag = r.Header().Get("ETag")
-	if c.responseBodyHash == newBodyHash {
+	if c.responseBodyHash == newBodyHash && c.managedConfig == managed {
 		return nil, nil
 	}
 	logrus.WithFields(logrus.Fields{"node_id": node.Id, "config_hash": newBodyHash, "previous_hash": c.responseBodyHash}).Debug("Normalized panel configuration changed")
 	c.responseBodyHash = newBodyHash
+	c.managedConfig = managed
 	node.ConfigHash = newBodyHash
+	node.PanelManaged = managed
+	if managed {
+		var snapshot bytes.Buffer
+		if err := json.Indent(&snapshot, r.Body(), "", "  "); err != nil {
+			return nil, fmt.Errorf("format plugin configuration snapshot")
+		}
+		node.RawConfig = append(json.RawMessage(nil), snapshot.Bytes()...)
+	}
 
 	return node, nil
 }

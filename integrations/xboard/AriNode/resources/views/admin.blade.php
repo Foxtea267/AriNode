@@ -11,7 +11,7 @@
 </head>
 <body>
 <header class="topbar">
-    <div class="brand">AriNode <span class="version">0.5.1</span></div>
+    <div class="brand">AriNode <span class="version">0.6.0</span></div>
     <div class="topbar-tools"><button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题"></button></div>
 </header>
 <main class="shell">

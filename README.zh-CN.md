@@ -1,5 +1,9 @@
 # AriNode
 
+## XBoard 节点配置自动下发
+
+插件 **0.6.0** 配合新版 AriNode，机器模式默认每 30 秒同步最新节点配置，自动写入 `/etc/arinode/panel-config/` 并只更新相应节点。修改端口、传输、证书、路由或 multiplex 后无需手动重启整个服务；相同配置不重写、不重载。首次更新插件后，在节点机执行 `sudo anctl upgrade`。[使用与兼容说明](docs/xboard-config-sync.md)。
+
 ## 面板 TLS 证书与 AnyTLS / HY2 / TUIC
 
 支持 XBoard `cert_config` 的 content / file 等模式；content 证书按绑定隔离、校验并以 600 权限幂等落盘，无变化不重载，auto 自签持久化复用。另提供 XBoard `4f48e61` 的最小配套补丁，补齐 AnyTLS `security=tls` 和保存时的 SNI/SAN 校验。[根因、部署、验收与回滚](docs/panel-certificates.md)。
@@ -34,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 ## XBoard 插件内置页面
 
-上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.5.1**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称、勾选节点并保存，即可复制带有面板地址、机器专属密钥、节点和内核的一键安装命令，默认 sing-box。
+上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.6.0**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称、勾选节点并保存，即可复制带有面板地址、机器专属密钥、节点和内核的一键安装命令，默认 sing-box。
 
 首次手动升级至 0.5.0 后，可直接在页面点击“插件更新”检查并安装官方新版：自动校验、备份和失败回滚，保留绑定与密钥。[在线更新说明](docs/xboard-plugin.md#页面内一键更新插件)。
 

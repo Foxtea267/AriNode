@@ -106,6 +106,7 @@ func (c *Controller) Start() error {
 	c.info = node
 	c.runtimeOptions.Store(options)
 	c.logCertificate(node, material, source)
+	c.savePanelConfig(node)
 	c.startTasks(node)
 	return nil
 }

@@ -2,7 +2,11 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.5.1** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.6.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+
+## 配置自动下发
+
+插件 0.6.0 配合新版 agent，机器模式自动下载实时节点配置、保存到受限本地文件并应用。面板保存后默认 30 秒内开始同步，只更新受影响节点；相同配置不重写、不重载。已有节点机首次执行 `sudo anctl upgrade`，之后不用因节点修改手动重启整个服务。[配置下发、文件路径与兼容范围](xboard-config-sync.md)。
 
 ## 页面内一键更新插件
 

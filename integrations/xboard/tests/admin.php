@@ -17,7 +17,7 @@ namespace App\Models {
         protected $table = 'v2_server';
         protected $guarded = [];
         public $timestamps = false;
-        protected $casts = ['enabled'=>'boolean', 'machine_id'=>'integer', 'protocol_settings'=>'array'];
+        protected $casts = ['enabled'=>'boolean', 'machine_id'=>'integer', 'protocol_settings'=>'array', 'custom_route_rules'=>'array'];
         public static function normalizeType($type): string { return $type === 'v2ray' ? 'vmess' : ($type === 'hysteria2' ? 'hysteria' : $type); }
     }
     class ServerMachine extends \Illuminate\Database\Eloquent\Model {
@@ -31,6 +31,12 @@ namespace App\Models {
     }
 }
 namespace App\Services {
+    // Boundary fixture: production uses XBoard's native protocol config builder.
+    class ServerService {
+        public static function buildNodeConfig(\App\Models\Server $node): array {
+            return ['protocol'=>$node->type, 'server_port'=>$node->server_port, ...($node->protocol_settings ?? [])];
+        }
+    }
     class NodeSyncService {
         public static array $notifications = [];
         public static bool $fail = false;
@@ -108,9 +114,11 @@ namespace {
     Capsule::schema()->create('v2_server', function ($table) {
         $table->increments('id'); $table->string('name'); $table->string('type'); $table->string('host');
         $table->boolean('enabled')->default(true); $table->integer('machine_id')->nullable(); $table->text('protocol_settings')->nullable();
+        $table->integer('server_port')->default(12000); $table->text('custom_route_rules')->nullable();
     });
     require __DIR__ . '/../AriNode/Services/Deployment.php';
     require __DIR__ . '/../AriNode/Controllers/AdminController.php';
+    require __DIR__ . '/../AriNode/Controllers/ConfigController.php';
     require __DIR__ . '/../AriNode/routes/api.php';
     require __DIR__ . '/../AriNode/routes/web.php';
     $routes = [];
@@ -120,6 +128,7 @@ namespace {
         check(in_array('admin', $routes[$path]->gatherMiddleware(), true), "Unprotected data route {$path}");
     }
     check($routes['/arinode/admin']->methods() === ['GET', 'HEAD'], 'HTML shell route missing');
+    check(in_array('server.v2', $routes['/api/v1/arinode/node/config']->gatherMiddleware(), true), 'Configuration download is not machine authenticated');
     $updateRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/update');
     check(count($updateRoutes) === 2, 'Update must provide separate GET check and POST install routes');
     foreach ($updateRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected update route'); }
@@ -141,6 +150,30 @@ namespace {
     check(strlen($machine->token) === 32 && $machine->is_active, 'Machine token/default enabled was not saved');
     check(Server::where('machine_id',$id)->pluck('id')->all() === [1,2], 'Nodes not bound');
     check(NodeSyncService::$notifications === [$id], 'Final bindings were not published once');
+    $downloads = new \Plugin\AriNode\Controllers\ConfigController();
+    $downloadRequest = req();
+    $downloadRequest->attributes->set('node_info', Server::find(1));
+    $snapshot = $downloads->download($downloadRequest);
+    $version = $snapshot->headers->get('X-AriNode-Config-Version');
+    check($snapshot->headers->get('X-AriNode-Config') === '1' && strlen($version) === 64, 'Config capability/version missing');
+    check(str_contains($snapshot->headers->get('Cache-Control'), 'no-store'), 'Config response can be cached');
+    $downloadRequest->headers->set('If-None-Match', 'stale-etag');
+    check($downloads->download($downloadRequest)->headers->get('X-AriNode-Config-Version') === $version, 'Identical config version unstable');
+    $changedNode = Server::find(1);
+    $changedNode->server_port = 13000;
+    $changedNode->custom_route_rules = [['name'=>'new-route','match'=>['domain_suffixes'=>['example.com']],'action'=>['type'=>'direct']]];
+    $changedNode->save();
+    $changed = $downloads->download($downloadRequest);
+    check(data($changed)['server_port'] === 13000 && count(data($changed)['custom_route_rules']) === 1, 'Saved node config was not delivered without refreshing old model');
+    check($changed->headers->get('X-AriNode-Config-Version') !== $version && $changed->getStatusCode() === 200, 'Stale ETag blocked config delivery');
+    check(!str_contains($changed->getContent(), $machine->token), 'Machine token leaked into node config file');
+    rejects(fn() => $downloads->download(req()), HttpException::class);
+    $downloads->disabled = true;
+    rejects(fn() => $downloads->download($downloadRequest), HttpException::class);
+    $downloads->disabled = false;
+    $changedNode->machine_id = $other->id; $changedNode->save();
+    rejects(fn() => $downloads->download($downloadRequest), HttpException::class);
+    $changedNode->machine_id = $id; $changedNode->save();
     $command = data($controller->command(req(['id'=>$id])))['data']['command'];
     check(str_contains($command, Deployment::INSTALLER) && str_contains($command, "ARINODE_NODES='vless:1 anytls:2'"), 'Command missing installer/nodes');
     check(str_contains($command,"ARINODE_CORE='sing'") && str_contains($command,"ARINODE_INSTALL_MODE='fresh'") && str_contains($command,"ARINODE_MACHINE_ID='{$id}'"), 'Default deployment flags incorrect');

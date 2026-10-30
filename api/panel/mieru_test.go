@@ -14,6 +14,10 @@ func TestMachineMieruConfiguration(t *testing.T) {
 	for _, transport := range []string{"TCP", "UDP", "", "invalid"} {
 		t.Run(transport, func(t *testing.T) {
 			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/v1/arinode/node/config" {
+					http.NotFound(w, r) // Legacy panel without the optional plugin.
+					return
+				}
 				if r.URL.Path != "/api/v2/server/config" || r.URL.Query().Get("machine_id") != "22" || r.URL.Query().Get("node_id") != "234" {
 					t.Errorf("incorrect native machine request")
 				}

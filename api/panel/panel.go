@@ -29,6 +29,8 @@ type Client struct {
 	nodeEtag         string
 	userEtag         string
 	responseBodyHash string
+	pluginRetryAt    time.Time
+	managedConfig    bool
 	UserList         *UserListBody
 	AliveMap         *AliveMap
 }

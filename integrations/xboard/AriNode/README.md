@@ -1,6 +1,12 @@
 # AriNode 服务器管理
 
-插件版本 **0.5.1**。安装 / 升级后启用插件，并刷新 XBoard 管理员后台。
+插件版本 **0.6.0**。安装 / 升级后启用插件，并刷新 XBoard 管理员后台。
+
+## 节点配置自动下发
+
+配合支持此接口的新版 AriNode，机器模式每个同步周期（默认 30 秒）直接获取最新节点配置。修改端口、传输、证书、路由或 multiplex 后自动应用，只更新受影响的节点，无需手动重启整个服务。配置文件保存到 `/etc/arinode/panel-config/<绑定摘要>.json`，权限 600；相同配置不重写，不触发重载。错误配置不覆盖上一份已生效文件，并自动重试。新增/移除绑定继续使用机器自动发现。
+
+已有节点机首次需要 `sudo anctl upgrade`；只更新 PHP 插件不能增加旧 agent 的协议能力。没有新版插件时继续使用 XBoard 原生接口。多面板、Komari 和本地内核配置不会被远程节点文件覆盖；非 root/容器可通过节点 Options 的 `PanelConfigPath` 指定可写持久化目录。详情见[自动下发说明](https://github.com/Foxtea267/AriNode/blob/main/docs/xboard-config-sync.md)。
 
 ### 页面内更新
 
@@ -36,6 +42,7 @@
 ## 原有接口
 
 - `POST /api/v1/arinode/provision`：为已有节点生成 AriNode JSON。
+- `GET /api/v1/arinode/node/config`：使用原生 machine token 鉴权的实时节点配置文件。
 - `/api/v1/arinode/cluster/*`：节点组成员与聚合上报。
 - `/api/v1/arinode/devices/alivelist`：原生节点在线 IP 信息。
 

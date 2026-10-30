@@ -131,7 +131,10 @@ func TestPanelCertificatesVerifiedForwardingAndRotation(t *testing.T) {
 			set(certificate, key)
 			panelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
-				case "/api/v2/server/config":
+				case "/api/v2/server/config", "/api/v1/arinode/node/config":
+					if r.URL.Path == "/api/v1/arinode/node/config" {
+						w.Header().Set("X-AriNode-Config", "1")
+					}
 					fmt.Fprintf(w, "{\"nonce\":%d,%s}", calls.Add(1), strings.TrimPrefix(strings.TrimSuffix(config.Load().(string), "}"), "{"))
 				case "/api/v2/server/user":
 					fmt.Fprint(w, `{"users":[{"id":1,"uuid":"11111111-1111-4111-8111-111111111111"}]}`)
@@ -155,7 +158,7 @@ func TestPanelCertificatesVerifiedForwardingAndRotation(t *testing.T) {
 			defer kernel.Close()
 			api, _ := panel.New(&conf.ApiConfig{APIHost: panelServer.URL, NodeID: 244, NodeType: protocol, MachineID: 39, Key: "test"})
 			limiter.Init()
-			controller := NewController(kernel, api, &conf.Options{ListenIP: "127.0.0.1", SingOptions: conf.NewSingOptions(), CertConfig: conf.NewCertConfig(), CertStorePath: t.TempDir()})
+			controller := NewController(kernel, api, &conf.Options{ListenIP: "127.0.0.1", SingOptions: conf.NewSingOptions(), CertConfig: conf.NewCertConfig(), CertStorePath: t.TempDir(), PanelConfigPath: t.TempDir()})
 			if err := controller.Start(); err != nil {
 				controller.Close()
 				t.Fatal(err)

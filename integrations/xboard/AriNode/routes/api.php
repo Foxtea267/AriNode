@@ -5,6 +5,7 @@ use Plugin\AriNode\Controllers\ProvisionController;
 use Plugin\AriNode\Controllers\ClusterController;
 use Plugin\AriNode\Controllers\AdminController;
 use Plugin\AriNode\Controllers\UpdateController;
+use Plugin\AriNode\Controllers\ConfigController;
 
 Route::middleware('admin')->group(function () {
     Route::get('/api/v1/arinode/admin/update', [UpdateController::class, 'check']);
@@ -27,6 +28,7 @@ Route::middleware('admin')->group(function () {
 Route::middleware('admin')->post('/api/v1/arinode/provision', [ProvisionController::class, 'provision']);
 Route::middleware('admin')->get('/api/v1/arinode/cluster/members', [ClusterController::class, 'members']);
 Route::middleware('server.v2')->group(function () {
+    Route::get('/api/v1/arinode/node/config', [ConfigController::class, 'download']);
     Route::get('/api/v1/arinode/devices/alivelist', [ClusterController::class, 'devices']);
     Route::get('/api/v1/arinode/cluster/info', [ClusterController::class, 'info']);
     Route::get('/api/v1/arinode/cluster/alivelist', [ClusterController::class, 'alivelist']);
