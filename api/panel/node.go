@@ -248,9 +248,16 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	if err != nil {
 		return nil, err
 	}
-
+	body := r.Body()
+	var local []OutboundConfig
+	if c.LocalOutbounds != nil {
+		local = c.LocalOutbounds()
+	}
 	if r.StatusCode() == 304 {
-		return nil, nil
+		if len(c.nodeBody) == 0 || (len(local) == 0 && len(c.LocalRoutes) == 0 && !c.lastLocalPresent) {
+			return nil, nil
+		}
+		body = c.nodeBody
 	}
 
 	if r != nil {
@@ -277,7 +284,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		TLSSettings     NativeTLSSettings  `json:"tls_settings"`
 		TLSSettingsBack *NativeTLSSettings `json:"tlsSettings"`
 	}
-	if err := json.Unmarshal(r.Body(), &native); err != nil {
+	if err := json.Unmarshal(body, &native); err != nil {
 		return nil, fmt.Errorf("decode native node settings: %w", err)
 	}
 	if native.TLSSettingsBack != nil {
@@ -297,7 +304,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	switch node.Type {
 	case "vmess", "vless":
 		rsp := &VAllssNode{}
-		err = json.Unmarshal(r.Body(), rsp)
+		err = json.Unmarshal(body, rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode v2ray params error: %s", err)
 		}
@@ -319,7 +326,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		node.Security = node.VAllss.Tls
 	case "shadowsocks":
 		rsp := &ShadowsocksNode{}
-		err = json.Unmarshal(r.Body(), rsp)
+		err = json.Unmarshal(body, rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode shadowsocks params error: %s", err)
 		}
@@ -328,7 +335,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		node.Security = None
 	case "trojan":
 		rsp := &TrojanNode{}
-		err = json.Unmarshal(r.Body(), rsp)
+		err = json.Unmarshal(body, rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode trojan params error: %s", err)
 		}
@@ -350,7 +357,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		if node.Security == Reality {
 			// Reality uses the same handshake/key fields as VLESS.
 			var settings VAllssNode
-			if err := json.Unmarshal(r.Body(), &settings); err != nil {
+			if err := json.Unmarshal(body, &settings); err != nil {
 				return nil, err
 			}
 			if settings.TlsSettingsBack != nil {
@@ -360,7 +367,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		}
 	case "tuic":
 		rsp := &TuicNode{}
-		err = json.Unmarshal(r.Body(), rsp)
+		err = json.Unmarshal(body, rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode tuic params error: %s", err)
 		}
@@ -369,7 +376,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		node.Security = Tls
 	case "anytls":
 		rsp := &AnyTlsNode{}
-		err = json.Unmarshal(r.Body(), rsp)
+		err = json.Unmarshal(body, rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode anytls params error: %s", err)
 		}
@@ -378,7 +385,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		node.Security = Tls
 	case "mieru":
 		rsp := &MieruNode{}
-		if err := json.Unmarshal(r.Body(), rsp); err != nil {
+		if err := json.Unmarshal(body, rsp); err != nil {
 			return nil, fmt.Errorf("decode mieru params: %w", err)
 		}
 		rsp.Transport = strings.ToLower(rsp.Transport)
@@ -393,7 +400,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		node.Security = None
 	case "hysteria":
 		rsp := &HysteriaNode{}
-		err = json.Unmarshal(r.Body(), rsp)
+		err = json.Unmarshal(body, rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode hysteria params error: %s", err)
 		}
@@ -402,7 +409,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		node.Security = Tls
 	case "hysteria2":
 		rsp := &Hysteria2Node{}
-		err = json.Unmarshal(r.Body(), rsp)
+		err = json.Unmarshal(body, rsp)
 		if err != nil {
 			return nil, fmt.Errorf("decode hysteria2 params error: %s", err)
 		}
@@ -466,6 +473,8 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	node.PullInterval = intervalToTime(cm.BaseConfig.PullInterval)
 
 	node.Common = cm
+	cm.CustomOutbounds = append(cm.CustomOutbounds, local...)
+	cm.CustomRouteRules = append(append([]CustomRouteRule(nil), c.LocalRoutes...), cm.CustomRouteRules...)
 	node.Policy, err = node.PolicyConfig()
 	if err != nil {
 		return nil, fmt.Errorf("node %d: %w", node.Id, err)
@@ -484,10 +493,14 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	}
 	hash := sha256.Sum256(canonical)
 	newBodyHash := hex.EncodeToString(hash[:])
-	responseHash := sha256.Sum256(r.Body())
+	responseHash := sha256.Sum256(body)
 	logrus.WithFields(logrus.Fields{"node_id": node.Id, "response_hash": hex.EncodeToString(responseHash[:]), "config_hash": newBodyHash,
 		"changed": c.responseBodyHash != newBodyHash}).Debug("Panel configuration fingerprints")
-	c.nodeEtag = r.Header().Get("ETag")
+	if r.StatusCode() != 304 {
+		c.nodeEtag = r.Header().Get("ETag")
+	}
+	c.nodeBody = append(c.nodeBody[:0], body...)
+	c.lastLocalPresent = len(local) > 0 || len(c.LocalRoutes) > 0
 	if c.responseBodyHash == newBodyHash && c.managedConfig == managed {
 		return nil, nil
 	}
@@ -498,7 +511,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	node.PanelManaged = managed
 	if managed {
 		var snapshot bytes.Buffer
-		if err := json.Indent(&snapshot, r.Body(), "", "  "); err != nil {
+		if err := json.Indent(&snapshot, body, "", "  "); err != nil {
 			return nil, fmt.Errorf("format plugin configuration snapshot")
 		}
 		node.RawConfig = append(json.RawMessage(nil), snapshot.Bytes()...)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/Foxtea267/AriNode/common/nodepolicy"
 	"github.com/Foxtea267/AriNode/conf"
 	"github.com/go-resty/resty/v2"
 )
@@ -31,6 +32,10 @@ type Client struct {
 	responseBodyHash string
 	pluginRetryAt    time.Time
 	managedConfig    bool
+	nodeBody         []byte
+	lastLocalPresent bool
+	LocalOutbounds   func() []nodepolicy.OutboundConfig
+	LocalRoutes      []nodepolicy.CustomRouteRule
 	UserList         *UserListBody
 	AliveMap         *AliveMap
 }

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 
 	"github.com/Foxtea267/AriNode/common/json5"
+	"github.com/Foxtea267/AriNode/common/nodepolicy"
 )
 
 type NodeConfig struct {
@@ -111,21 +112,22 @@ func (n *NodeConfig) UnmarshalJSON(data []byte) (err error) {
 }
 
 type Options struct {
-	Name                   string          `json:"Name"`
-	Core                   string          `json:"Core"`
-	CoreName               string          `json:"CoreName"`
-	ListenIP               string          `json:"ListenIP"`
-	SendIP                 string          `json:"SendIP"`
-	DeviceOnlineMinTraffic int64           `json:"DeviceOnlineMinTraffic"`
-	ReportMinTraffic       int64           `json:"ReportMinTraffic"`
-	LimitConfig            LimitConfig     `json:"LimitConfig"`
-	RawOptions             json.RawMessage `json:"RawOptions"`
-	XrayOptions            *XrayOptions    `json:"XrayOptions"`
-	SingOptions            *SingOptions    `json:"SingOptions"`
-	Hysteria2ConfigPath    string          `json:"Hysteria2ConfigPath"`
-	CertConfig             *CertConfig     `json:"CertConfig"`
-	CertStorePath          string          `json:"CertStorePath,omitempty"`
-	PanelConfigPath        string          `json:"PanelConfigPath,omitempty"`
+	Name                   string                       `json:"Name"`
+	Core                   string                       `json:"Core"`
+	CoreName               string                       `json:"CoreName"`
+	ListenIP               string                       `json:"ListenIP"`
+	SendIP                 string                       `json:"SendIP"`
+	DeviceOnlineMinTraffic int64                        `json:"DeviceOnlineMinTraffic"`
+	ReportMinTraffic       int64                        `json:"ReportMinTraffic"`
+	LimitConfig            LimitConfig                  `json:"LimitConfig"`
+	RawOptions             json.RawMessage              `json:"RawOptions"`
+	XrayOptions            *XrayOptions                 `json:"XrayOptions"`
+	SingOptions            *SingOptions                 `json:"SingOptions"`
+	Hysteria2ConfigPath    string                       `json:"Hysteria2ConfigPath"`
+	CertConfig             *CertConfig                  `json:"CertConfig"`
+	CertStorePath          string                       `json:"CertStorePath,omitempty"`
+	PanelConfigPath        string                       `json:"PanelConfigPath,omitempty"`
+	DynamicRoutes          []nodepolicy.CustomRouteRule `json:"DynamicRoutes,omitempty"`
 }
 
 func (o *Options) UnmarshalJSON(data []byte) error {

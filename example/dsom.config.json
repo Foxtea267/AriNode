@@ -1,0 +1,48 @@
+{
+  "Log": {"Level": "info"},
+  "Cores": [{"Type": "sing"}],
+  "Panels": [{"Name": "xboard", "ApiHost": "https://panel.example.com", "ApiKeyEnv": "XBOARD_MACHINE_TOKEN", "MachineID": 39}],
+  "DSOMStatePath": "/var/lib/arinode/dsom",
+  "DynamicOutbounds": [
+    {
+      "tag": "bd-residential",
+      "enabled": true,
+      "mode": "auto",
+      "gateway": {
+        "server": "kochab.srvgdx.com",
+        "server_port": 10374,
+        "credentials_file": "/etc/arinode/dsom/gateway-auth.json"
+      },
+      "direct": {"enabled": true},
+      "health_check": {
+        "interval": 60,
+        "timeout": 5,
+        "retries": 1,
+        "failure_threshold": 3,
+        "success_threshold": 2,
+        "cooldown": 300,
+        "min_consensus": 2,
+        "dns_ttl": 60,
+        "sources": [
+          {"url": "https://api.ipify.org"},
+          {"url": "https://ipv4.icanhazip.com"}
+        ]
+      },
+      "metadata": {"url": "https://ipwho.is/{ip}"}
+    }
+  ],
+  "Nodes": [
+    {
+      "Panel": "xboard",
+      "NodeID": 244,
+      "NodeType": "anytls",
+      "DynamicRoutes": [
+        {
+          "name": "ai-via-bd",
+          "match": {"domain_suffixes": ["claude.com", "claude.ai", "anthropic.com", "openai.com"]},
+          "action": {"type": "route", "target": "bd-residential"}
+        }
+      ]
+    }
+  ]
+}

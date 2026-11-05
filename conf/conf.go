@@ -8,16 +8,19 @@ import (
 	"strings"
 
 	"github.com/Foxtea267/AriNode/common/json5"
+	"github.com/Foxtea267/AriNode/dsom"
 
 	"encoding/json/v2"
 )
 
 type Conf struct {
-	LogConfig   LogConfig       `json:"Log"`
-	CoresConfig []CoreConfig    `json:"Cores"`
-	Panels      []PanelBinding  `json:"Panels,omitempty"`
-	Komari      []KomariBinding `json:"Komari,omitempty"`
-	NodeConfig  []NodeConfig    `json:"Nodes"`
+	LogConfig        LogConfig       `json:"Log"`
+	CoresConfig      []CoreConfig    `json:"Cores"`
+	Panels           []PanelBinding  `json:"Panels,omitempty"`
+	Komari           []KomariBinding `json:"Komari,omitempty"`
+	NodeConfig       []NodeConfig    `json:"Nodes"`
+	DynamicOutbounds []dsom.Config   `json:"DynamicOutbounds,omitempty"`
+	DSOMStatePath    string          `json:"DSOMStatePath,omitempty"`
 }
 
 type PanelBinding struct {
@@ -70,6 +73,9 @@ func (p *Conf) LoadFromPath(filePath string) error {
 		return err
 	}
 	if err := p.resolveKomari(); err != nil {
+		return err
+	}
+	if err := dsom.Validate(p.DynamicOutbounds); err != nil {
 		return err
 	}
 	for i := range p.NodeConfig {

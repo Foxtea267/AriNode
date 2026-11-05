@@ -1,5 +1,11 @@
 # AriNode
 
+## Dynamic SOCKS5 Outbound Manager (DSOM)
+
+DSOM adds authenticated SOCKS5 exit-IP probing, IPv4/IPv6 consensus, history, optional ASN/country metadata, Gateway/Direct/Auto modes, fallback gateways, health thresholds and cooldown. It reuses existing Xray/sing-box policies through a private loopback SOCKS relay; upstream changes preserve native outbounds and existing connections. Configure top-level `DynamicOutbounds` locally and reference its tag from XBoard routes, without changing XBoard source. `anctl dsom status` shows state; `anctl dsom diagnose --host HOST --port PORT [--icmp]` diagnoses one explicit gateway.
+
+**An observed exit IP is not a reachable residential proxy.** Direct mode only uses explicitly authorized host:port pairs after SOCKS5 authentication and real forwarding checks. Missing/unproven direct access remains `DIRECT_UNAVAILABLE`; no scanning or guessed ports. First version supports TCP CONNECT only. [Setup, schema, limits and diagnostics](docs/dsom.md) · [Full local example](example/dsom.config.json).
+
 ## Automatic XBoard node configuration delivery
 
 Plugin **0.6.0** and the updated agent fetch fresh machine-mode node configurations every synchronization cycle (30 seconds by default), apply changes only to the affected node, and save private snapshots under `/etc/arinode/panel-config/`. Unchanged configurations do not rewrite files or reload inbounds. Upgrade the plugin and run `sudo anctl upgrade` once on existing agents. Subsequent panel edits require no manual service restart. [Configuration delivery and compatibility](docs/xboard-config-sync.md).

@@ -1,5 +1,11 @@
 # AriNode
 
+## 动态 SOCKS5 出站管理（DSOM）
+
+支持经 SOCKS5 多源探测 IPv4/IPv6 出口、IP 历史、可选国家/ASN 信息、Gateway/Direct/Auto 模式、备用网关、失败/成功阈值和切换冷却。使用独立模块和带随机认证的回环 SOCKS 中继，复用 Xray/sing-box 出站及路由；切换不重建 native outbound，已有连接继续使用旧链路。本地配置顶层 `DynamicOutbounds`，XBoard 原有路由引用 tag，无需修改面板源码。
+
+**出口 IP 不等于可直连住宅代理。** 没有明确授权的代理地址及完整认证/转发验证时显示 `DIRECT_UNAVAILABLE`，Auto 保留 Gateway；不会猜端口或扫描住宅地址。首版支持 TCP CONNECT。状态：`anctl dsom status`；单网关诊断：`anctl dsom diagnose --host 主机 --port 端口 [--icmp]`。[配置、边界与诊断说明](docs/dsom.md) · [完整本地示例](example/dsom.config.json)。
+
 ## XBoard 节点配置自动下发
 
 插件 **0.6.0** 配合新版 AriNode，机器模式默认每 30 秒同步最新节点配置，自动写入 `/etc/arinode/panel-config/` 并只更新相应节点。修改端口、传输、证书、路由或 multiplex 后无需手动重启整个服务；相同配置不重写、不重载。首次更新插件后，在节点机执行 `sudo anctl upgrade`。[使用与兼容说明](docs/xboard-config-sync.md)。

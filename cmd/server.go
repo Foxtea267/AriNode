@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/Foxtea267/AriNode/conf"
 	vCore "github.com/Foxtea267/AriNode/core"
+	"github.com/Foxtea267/AriNode/dsom"
 	"github.com/Foxtea267/AriNode/komari"
 	"github.com/Foxtea267/AriNode/limiter"
 	"github.com/Foxtea267/AriNode/node"
@@ -88,18 +90,26 @@ func serverHandle(_ *cobra.Command, _ []string) {
 	}
 	defer vCore.CloseSafely(vc)
 	log.Info("Core ", vc.Type(), " started")
+	dynamic := dsom.New(c.DSOMStatePath)
+	if err := dynamic.Reconcile(c.DynamicOutbounds); err != nil {
+		log.WithError(err).Error("Initialize dynamic outbounds failed")
+		return
+	}
+	defer dynamic.Close()
 	nodes := node.New()
+	nodes.UseDynamicOutbounds(dynamic)
 	err = nodes.Start(c.NodeConfig, vc)
 	if err != nil {
 		log.WithField("err", err).Error("Run nodes failed")
 		return
 	}
 	log.Info("Nodes started")
+	defer nodes.Close()
 	monitors := komari.New()
 	monitors.Reconcile(c.Komari)
 	defer monitors.Close()
 	if statusListen != "" {
-		err = serveStatus(statusListen, nodes, monitors)
+		err = serveStatus(statusListen, nodes, monitors, dynamic)
 		if err != nil {
 			log.WithError(err).Error("Start local status API failed")
 			return
@@ -108,9 +118,20 @@ func serverHandle(_ *cobra.Command, _ []string) {
 	xdns := os.Getenv("XRAY_DNS_PATH")
 	sdns := os.Getenv("SING_DNS_PATH")
 	if watch {
-		err = c.Watch(config, xdns, sdns, func(next *conf.Conf) error {
+		watchContext, stopWatching := context.WithCancel(context.Background())
+		defer stopWatching()
+		err = c.WatchContext(watchContext, config, xdns, sdns, func(next *conf.Conf) error {
 			if !reflect.DeepEqual(c.CoresConfig, next.CoresConfig) {
 				return fmt.Errorf("core settings changed; use anctl restart to apply them")
+			}
+			if c.DSOMStatePath != next.DSOMStatePath {
+				return fmt.Errorf("DSOMStatePath changed; restart to change the history directory")
+			}
+			if err := node.ValidateBindings(next.NodeConfig); err != nil {
+				return err
+			}
+			if err := dynamic.Reconcile(next.DynamicOutbounds); err != nil {
+				return err
 			}
 			if err := nodes.Reconcile(next.NodeConfig); err != nil {
 				return err
@@ -132,10 +153,13 @@ func serverHandle(_ *cobra.Command, _ []string) {
 		osSignals := make(chan os.Signal, 1)
 		signal.Notify(osSignals, syscall.SIGINT, syscall.SIGTERM)
 		<-osSignals
+		// Stop DSOM probes immediately, before waiting for older node reporting
+		// tasks to finish their own shutdown.
+		dynamic.Close()
 	}
 }
 
-func serveStatus(address string, nodes *node.Node, monitors *komari.Manager) error {
+func serveStatus(address string, nodes *node.Node, monitors *komari.Manager, managers ...*dsom.Manager) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil || (host != "localhost" && net.ParseIP(host) == nil) {
 		return fmt.Errorf("invalid --status-listen address")
@@ -178,7 +202,11 @@ func serveStatus(address string, nodes *node.Node, monitors *komari.Manager) err
 				break
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"service": "AriNode", "status": state, "started_at": started, "nodes": bindings, "komari": komariBindings})
+		dynamic := []dsom.Status{}
+		if len(managers) > 0 && managers[0] != nil {
+			dynamic = managers[0].Snapshot()
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"service": "AriNode", "status": state, "started_at": started, "nodes": bindings, "komari": komariBindings, "dynamic_outbounds": dynamic})
 	})
 	go func() {
 		if err := http.Serve(listener, mux); err != nil {

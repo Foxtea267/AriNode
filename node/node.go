@@ -1,6 +1,8 @@
 package node
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/conf"
 	vCore "github.com/Foxtea267/AriNode/core"
+	"github.com/Foxtea267/AriNode/dsom"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -45,6 +48,18 @@ type Node struct {
 	done          chan struct{}
 	retryInterval time.Duration
 	snapshot      atomic.Value // []BindingStatus
+	dynamic       *dsom.Manager
+}
+
+// Attach once before Start. Health changes do not mutate panel config or rebuild
+// inbounds; the native SOCKS outbound always targets a stable loopback listener.
+func (n *Node) UseDynamicOutbounds(manager *dsom.Manager) { n.dynamic = manager }
+
+func ValidateBindings(nodes []conf.NodeConfig) error {
+	if len(nodes) == 0 {
+		return fmt.Errorf("no node bindings configured")
+	}
+	return validateBindings(nodes)
 }
 
 func New() *Node {
@@ -134,6 +149,10 @@ func (n *Node) tryPendingLocked() {
 			n.failLocked(entry, err)
 			continue
 		}
+		if n.dynamic != nil && c.Options.Core != "hysteria2" {
+			p.LocalOutbounds = n.dynamic.Outbounds
+		}
+		p.LocalRoutes = c.Options.DynamicRoutes
 		controller := NewController(n.core, p, &c.Options)
 		key := machineKey(c)
 		controller.machinePrimary.Store(c.ApiConfig.Cluster == nil && c.ApiConfig.MachineID > 0 && !primaries[key])
@@ -228,7 +247,7 @@ func (n *Node) reconcileLocked(nodes []conf.NodeConfig) {
 		key := bindingKey(c)
 		if entry, ok := old[key]; ok {
 			delete(old, key)
-			if reflect.DeepEqual(entry.config, c) {
+			if bindingConfigEqual(entry.config, c) {
 				next = append(next, entry)
 				continue
 			}
@@ -249,6 +268,37 @@ func (n *Node) reconcileLocked(nodes []conf.NodeConfig) {
 	}
 	n.entries = next
 	n.tryPendingLocked()
+}
+
+// Local config formatters may reorder object keys while editing DSOM alone.
+// Keep the original RawOptions for kernel-specific settings, but compare valid
+// JSON semantically so a formatting change does not tear down proxy inbounds.
+func bindingConfigEqual(a, b conf.NodeConfig) bool {
+	canonical := func(raw json.RawMessage) []byte {
+		if len(raw) == 0 {
+			return nil
+		}
+		if !json.Valid(raw) {
+			return raw
+		}
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		var value any
+		if decoder.Decode(&value) != nil {
+			return raw
+		}
+		result, err := json.Marshal(value)
+		if err != nil {
+			return raw
+		}
+		return result
+	}
+	if !bytes.Equal(a.Options.RawOptions, b.Options.RawOptions) && !bytes.Equal(canonical(a.Options.RawOptions), canonical(b.Options.RawOptions)) {
+		return false
+	}
+	a.Options.RawOptions = nil
+	b.Options.RawOptions = nil
+	return reflect.DeepEqual(a, b)
 }
 
 func validateBindings(nodes []conf.NodeConfig) error {

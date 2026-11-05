@@ -1,0 +1,10 @@
+{
+  "routes": [
+    {
+      "id": 9001,
+      "match": ["claude.com", "*.claude.com", "claude.ai", "*.claude.ai", "anthropic.com", "*.anthropic.com", "openai.com", "*.openai.com"],
+      "action": "proxy",
+      "action_value": "bd-residential"
+    }
+  ]
+}

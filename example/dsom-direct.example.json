@@ -1,0 +1,5 @@
+{
+  "server": "authorized-bd-proxy.example.com",
+  "server_port": 1080,
+  "credentials_file": "/etc/arinode/dsom/direct-auth.json"
+}
