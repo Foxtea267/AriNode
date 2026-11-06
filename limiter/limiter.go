@@ -23,13 +23,14 @@ func Init() {
 type Limiter struct {
 	aliveMu       sync.RWMutex
 	aliveIPs      map[int]map[string]bool
+	activeDevices map[string]map[string]*deviceSession
 	ruleMu        sync.RWMutex
 	DomainRules   []*regexp.Regexp
 	IPRules       []netip.Prefix
 	ProtocolRules []string
 	SpeedLimit    int
 	UserOnlineIP  *sync.Map      // Key: TagUUID, value: {Key: Ip, value: Uid}
-	OldUserOnline *sync.Map      // Key: Ip, value: Uid
+	OldUserOnline *sync.Map      // Key: deviceIdentity (UID + IP), value: Uid
 	UUIDtoUID     map[string]int // Key: UUID, value: Uid
 	UserLimitInfo *sync.Map      // Key: TagUUID value: UserLimitInfo
 	SpeedLimiter  *sync.Map      // key: TagUUID, value: *ratelimit.Bucket
@@ -53,6 +54,7 @@ func AddLimiter(tag string, l *conf.LimitConfig, users []panel.UserInfo, aliveLi
 		SpeedLimiter:  new(sync.Map),
 		AliveList:     aliveList,
 		OldUserOnline: new(sync.Map),
+		activeDevices: make(map[string]map[string]*deviceSession),
 	}
 	uuidmap := make(map[string]int)
 	for i := range users {
@@ -98,6 +100,7 @@ func (l *Limiter) UpdateUser(tag string, added []panel.UserInfo, deleted []panel
 		l.SpeedLimiter.Delete(format.UserTag(tag, deleted[i].Uuid))
 		delete(l.UUIDtoUID, deleted[i].Uuid)
 		l.aliveMu.Lock()
+		delete(l.activeDevices, format.UserTag(tag, deleted[i].Uuid))
 		delete(l.AliveList, deleted[i].Id)
 		delete(l.aliveIPs, deleted[i].Id)
 		l.aliveMu.Unlock()
@@ -182,19 +185,38 @@ func (l *Limiter) GetOnlineDevice() (*[]panel.OnlineUser, error) {
 	defer l.aliveMu.Unlock()
 	var onlineUser []panel.OnlineUser
 	l.OldUserOnline = new(sync.Map)
+	seen := make(map[deviceIdentity]bool)
+	collect := func(user, ip string, uid int) {
+		info, ok := l.UserLimitInfo.Load(user)
+		if !ok || info.(*UserLimitInfo).UID != uid {
+			return
+		}
+		key := deviceIdentity{UID: uid, IP: ip}
+		if !seen[key] {
+			seen[key] = true
+			l.OldUserOnline.Store(key, uid)
+			onlineUser = append(onlineUser, panel.OnlineUser{UID: uid, IP: ip})
+		}
+	}
 	l.UserOnlineIP.Range(func(key, value interface{}) bool {
 		taguuid := key.(string)
 		ipMap := value.(*sync.Map)
 		ipMap.Range(func(key, value interface{}) bool {
 			uid := value.(int)
 			ip := key.(string)
-			l.OldUserOnline.Store(ip, uid)
-			onlineUser = append(onlineUser, panel.OnlineUser{UID: uid, IP: ip})
+			collect(taguuid, ip, uid)
 			return true
 		})
 		l.UserOnlineIP.Delete(taguuid) // Reset online device
 		return true
 	})
+	// A connection may stay alive for hours without another authentication or
+	// routed request. Keep its actual IP, never every historical IP of its UID.
+	for user, addresses := range l.activeDevices {
+		for ip, session := range addresses {
+			collect(user, ip, session.uid)
+		}
+	}
 
 	return &onlineUser, nil
 }

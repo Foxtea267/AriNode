@@ -71,7 +71,7 @@ func (h *HookServer) RoutedConnection(_ context.Context, conn net.Conn, m adapte
 	} else {
 		t = c.(*counter.TrafficCounter)
 	}
-	conn = counter.NewConnCounter(conn, t.GetCounter(m.User))
+	conn = counter.NewConnCounter(conn, t.GetCounter(m.User), l.TrackDeviceIP(taguuid, ip))
 	return conn
 }
 
@@ -119,6 +119,6 @@ func (h *HookServer) RoutedPacketConnection(_ context.Context, conn N.PacketConn
 	} else {
 		t = c.(*counter.TrafficCounter)
 	}
-	conn = counter.NewPacketConnCounter(conn, t.GetCounter(m.User))
+	conn = counter.NewPacketConnCounter(conn, t.GetCounter(m.User), l.TrackDeviceIP(taguuid, ip))
 	return conn
 }

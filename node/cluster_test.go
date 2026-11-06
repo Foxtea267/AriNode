@@ -2,6 +2,7 @@ package node
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/conf"
 	"github.com/Foxtea267/AriNode/limiter"
@@ -59,5 +60,36 @@ func TestClusterRetriesExactSnapshotAndClearsExpiredUserIPs(t *testing.T) {
 	c.reportUserTrafficTask()
 	if len(received[2].Alive) != 0 {
 		t.Fatal("empty member snapshot did not remove expired user's IP")
+	}
+}
+
+func TestClusterTrafficDoesNotReviveSevenOldDeviceIPs(t *testing.T) {
+	var received panel.ClusterReport
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Error(err)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"accepted": true, "report_id": received.ReportID})
+	}))
+	defer s.Close()
+	api, err := panel.New(&conf.ApiConfig{APIHost: s.URL, Key: "test", NodeType: "vless", NodeID: 7, Cluster: &conf.ClusterConfig{Domain: "pool.example.com", MemberID: "hk-01"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	limiter.Init()
+	l := limiter.AddLimiter("churn", &conf.LimitConfig{}, []panel.UserInfo{{Id: 1, Uuid: "same"}}, nil)
+	defer limiter.DeleteLimiter("churn")
+	l.CheckLimit("churn|same", "192.0.2.8", true, true)
+	c := NewController(&clusterCore{}, api, &conf.Options{})
+	c.tag, c.limiter, c.info = "churn", l, &panel.NodeInfo{PushInterval: time.Minute}
+	c.clusterAlive = map[int]map[string]time.Time{1: {}}
+	for i := 1; i <= 7; i++ {
+		c.clusterAlive[1][fmt.Sprintf("192.0.2.%d", i)] = time.Now().Add(-time.Hour)
+	}
+	if err := c.reportUserTrafficTask(); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(received.Alive[1], []string{"192.0.2.8"}) {
+		t.Fatalf("one active IP revived expired devices: %v", received.Alive[1])
 	}
 }

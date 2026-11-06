@@ -22,7 +22,7 @@ func (l *Limiter) admitDeviceIP(user string, uid int, ip string, limit int) bool
 	v, _ := l.UserOnlineIP.LoadOrStore(user, new(sync.Map))
 	local := v.(*sync.Map)
 	_, localKnown := local.Load(ip)
-	known := localKnown || l.aliveIPs[uid][ip]
+	known := localKnown || l.aliveIPs[uid][ip] || l.activeDevices[user][ip] != nil
 	if known || limit <= 0 {
 		local.Store(ip, uid)
 		return true
@@ -31,10 +31,14 @@ func (l *Limiter) admitDeviceIP(user string, uid int, ip string, limit int) bool
 	for address := range l.aliveIPs[uid] {
 		all[address] = true
 	}
+	for address := range l.activeDevices[user] {
+		all[address] = true
+	}
 	l.OldUserOnline.Range(func(key, value any) bool {
 		if value.(int) == uid {
-			all[key.(string)] = true
-			if key.(string) == ip {
+			address := key.(deviceIdentity).IP
+			all[address] = true
+			if address == ip {
 				known = true
 			}
 		}

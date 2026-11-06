@@ -207,9 +207,10 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network) (*
 			lm = lmloaded.(*LinkManager)
 		}
 		managedWriter := &ManagedWriter{
-			writer:  uplinkWriter,
+			writer:  &deviceWriter{writer: uplinkWriter, release: limit.TrackDeviceIP(user.Email, sessionInbound.Source.Address.IP().String())},
 			manager: lm,
 			abort: func() {
+				common.Close(outboundLink.Writer)
 				common.Close(downlinkWriter)
 				common.Interrupt(downlinkReader)
 				if sessionInbound.Conn != nil {
@@ -219,6 +220,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network) (*
 		}
 		lm.AddLink(managedWriter, outboundLink.Reader)
 		inboundLink.Writer = managedWriter
+		outboundLink.Writer = &deviceWriter{writer: outboundLink.Writer, release: limit.TrackDeviceIP(user.Email, sessionInbound.Source.Address.IP().String())}
 		if w != nil {
 			sessionInbound.CanSpliceCopy = 3
 			inboundLink.Writer = rate.NewRateLimitWriter(inboundLink.Writer, w)
@@ -408,7 +410,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			lm = lmloaded.(*LinkManager)
 		}
 		managedWriter := &ManagedWriter{
-			writer:  outbound.Writer,
+			writer:  &deviceWriter{writer: outbound.Writer, release: limit.TrackDeviceIP(user.Email, sessionInbound.Source.Address.IP().String())},
 			manager: lm,
 			abort: func() {
 				if sessionInbound.Conn != nil {
@@ -434,6 +436,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		outbound.Reader = &CounterReader{
 			Reader:  &buf.TimeoutWrapperReader{Reader: outbound.Reader},
 			Counter: &ts.UpCounter,
+			Release: limit.TrackDeviceIP(user.Email, sessionInbound.Source.Address.IP().String()),
 		}
 		lm.AddLink(managedWriter, outbound.Reader)
 		outbound.Writer = &dispatcher.SizeStatWriter{

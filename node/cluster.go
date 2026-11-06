@@ -36,13 +36,8 @@ func (c *Controller) reportClusterTask() error {
 			}
 			c.clusterAlive[d.UID][d.IP] = now
 		}
-		for _, u := range traffic {
-			if u.Upload+u.Download > 0 {
-				for ip := range c.clusterAlive[u.UID] {
-					c.clusterAlive[u.UID][ip] = now
-				}
-			}
-		}
+		// UID-level traffic cannot identify which source IP is still connected.
+		// Only newly observed or genuinely open connections above refresh an IP.
 		allowed := c.limiter.AllowedUserIDs()
 		retention := 3 * c.info.PushInterval
 		if retention < 180*time.Second {

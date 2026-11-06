@@ -34,40 +34,86 @@ func (c *Controller) reportUserTrafficTask() (err error) {
 		}
 	}
 
-	if onlineDevice, err := c.limiter.GetOnlineDevice(); err != nil {
-		log.Print(err)
-	} else if len(*onlineDevice) > 0 {
-		// Only report user has traffic > 100kb to allow ping test
-		var result []panel.OnlineUser
-		var nocountUID = make(map[int]struct{})
-		for _, traffic := range userTraffic {
-			total := traffic.Upload + traffic.Download
-			if total < int64(c.Options.DeviceOnlineMinTraffic*1000) {
-				nocountUID[traffic.UID] = struct{}{}
-			}
-		}
-		for _, online := range *onlineDevice {
-			if _, ok := nocountUID[online.UID]; !ok {
-				result = append(result, online)
-			}
-		}
-		data := make(map[int][]string)
-		for _, onlineuser := range result {
-			// json structure: { UID1:["ip1","ip2"],UID2:["ip3","ip4"] }
-			data[onlineuser.UID] = append(data[onlineuser.UID], onlineuser.IP)
-		}
-		if err = c.apiClient.ReportNodeOnlineUsers(&data); err != nil {
-			log.WithFields(log.Fields{
-				"tag": c.tag,
-				"err": err,
-			}).Info("Report online users failed")
-		} else {
-			log.WithField("tag", c.tag).Infof("Total %d online users, %d Reported", len(*onlineDevice), len(result))
-			log.WithField("tag", c.tag).Debugf("Online users: %+v", data)
-		}
+	if err := c.reportOnlineDevices(userTraffic); err != nil {
+		log.WithError(err).WithField("tag", c.tag).Info("Report online users failed")
 	}
 
 	userTraffic = nil
+	return nil
+}
+
+func (c *Controller) reportOnlineDevices(userTraffic []panel.UserTraffic) error {
+	onlineDevice, err := c.limiter.GetOnlineDevice()
+	if err != nil {
+		return err
+	}
+	// Preserve the configured traffic threshold used to exclude probe traffic.
+	var result []panel.OnlineUser
+	var nocountUID = make(map[int]struct{})
+	for _, traffic := range userTraffic {
+		total := traffic.Upload + traffic.Download
+		if total < int64(c.Options.DeviceOnlineMinTraffic*1000) {
+			nocountUID[traffic.UID] = struct{}{}
+		}
+	}
+	for _, online := range *onlineDevice {
+		if _, ok := nocountUID[online.UID]; !ok {
+			result = append(result, online)
+		}
+	}
+	data := make(map[int][]string)
+	for _, onlineuser := range result {
+		// json structure: { UID1:["ip1","ip2"],UID2:["ip3","ip4"] }
+		data[onlineuser.UID] = append(data[onlineuser.UID], onlineuser.IP)
+	}
+	uncertain := make(map[int]bool)
+	if c.Options.Core == "hysteria2" {
+		// The standalone HY2 API has UID-level traffic but no stable connection
+		// identity across migration. Do not invent source-IP activity or declare
+		// an authorized user offline while its traffic is still flowing.
+		allowed := c.limiter.AllowedUserIDs()
+		for _, traffic := range userTraffic {
+			if traffic.Upload+traffic.Download > 0 && allowed[traffic.UID] && c.reportedOnline[traffic.UID] && len(data[traffic.UID]) == 0 {
+				uncertain[traffic.UID] = true
+			}
+		}
+	}
+	// XBoard replaces only the users present in /alive. Omitting a previously
+	// reported UID leaves its old IPs and online_count stale until another update.
+	for uid := range c.reportedOnline {
+		if _, exists := data[uid]; !exists && !uncertain[uid] {
+			data[uid] = []string{}
+		}
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	if c.reportedOnline == nil {
+		c.reportedOnline = make(map[int]bool)
+	}
+	// A lost acknowledgement may still have committed on the panel. Remember
+	// every attempted UID so a later empty snapshot clears it and can be retried.
+	for uid := range data {
+		c.reportedOnline[uid] = true
+	}
+	if err := c.apiClient.ReportNodeOnlineUsers(&data); err != nil {
+		return err
+	}
+	c.reportedOnline = uncertain
+	for uid, ips := range data {
+		if len(ips) > 0 {
+			c.reportedOnline[uid] = true
+		}
+	}
+	activeUsers, clearedUsers := 0, 0
+	for _, ips := range data {
+		if len(ips) > 0 {
+			activeUsers++
+		} else {
+			clearedUsers++
+		}
+	}
+	log.WithFields(log.Fields{"tag": c.tag, "online_users": activeUsers, "device_ips": len(result), "cleared_users": clearedUsers}).Info("Report online devices")
 	return nil
 }
 

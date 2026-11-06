@@ -21,8 +21,8 @@ jobs:
           cache: true
       - name: Test
         run: GOEXPERIMENT=jsonv2 go test -p 2 -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' ./...
-      - name: Check DSOM and config watcher concurrency
-        run: GOEXPERIMENT=jsonv2 go test -race -p 2 ./dsom ./conf
+      - name: Check managers, device tracking and config watcher concurrency
+        run: GOEXPERIMENT=jsonv2 go test -race -p 2 ./dsom ./conf ./limiter
 
       - name: Validate installer shell syntax
         run: bash -n scripts/install.sh scripts/tune.sh

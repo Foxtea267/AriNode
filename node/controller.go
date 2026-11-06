@@ -16,6 +16,7 @@ import (
 type Controller struct {
 	pendingClusterReport      *panel.ClusterReport
 	clusterAlive              map[int]map[string]time.Time
+	reportedOnline            map[int]bool
 	server                    vCore.Core
 	apiClient                 *panel.Client
 	machinePrimary            atomic.Bool
