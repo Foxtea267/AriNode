@@ -43,13 +43,13 @@
     </section>
 </main>
 <dialog id="server-dialog" aria-labelledby="form-title">
-    <div class="dialog-heading"><div><h2 id="form-title">添加服务器</h2><p>填写服务器信息，并选择要部署的节点。</p></div><button id="close-server" class="icon-button" type="button" aria-label="关闭服务器编辑">×</button></div>
+    <div class="dialog-heading"><div><h2 id="form-title">添加服务器</h2><p>可先部署服务器，再绑定节点。</p></div><button id="close-server" class="icon-button" type="button" aria-label="关闭服务器编辑">×</button></div>
     <form id="server-form">
         <div class="dialog-body">
             <div class="field"><label for="server-name">服务器名称 <span class="required">*</span></label><input id="server-name" maxlength="255" placeholder="例如 US-01" required></div>
             <div class="field"><label for="server-notes">备注 / IP 或域名</label><textarea id="server-notes" rows="2" maxlength="4000" placeholder="用于识别这台服务器"></textarea></div>
             <label class="toggle-row" for="server-active"><span><strong>启用服务器</strong><small>启用后可生成部署命令</small></span><input id="server-active" type="checkbox" role="switch" checked></label>
-            <div class="field node-field"><div class="field-heading"><label for="node-search">绑定已有节点 <span class="required">*</span></label><span id="selected-count" class="muted">已选 0 个</span></div><input id="node-search" type="search" placeholder="搜索名称、协议或节点 ID"><div id="node-options" class="node-options"></div><p class="field-help">已属于其他服务器的节点需先在原服务器中解绑。</p></div>
+            <div class="field node-field"><div class="field-heading"><label for="node-search">绑定节点（可选）</label><span id="selected-count" class="muted">已选 0 个</span></div><input id="node-search" type="search" placeholder="搜索名称、协议或节点 ID"><div id="node-options" class="node-options"></div><p class="field-help">已属于其他服务器的节点需先在原服务器中解绑。</p></div>
             <p id="server-error" class="form-error" role="alert" hidden></p>
         </div>
         <div class="dialog-footer"><button id="cancel-server" class="button subtle" type="button">取消</button><button id="save-server" class="button" type="submit">保存并生成部署命令</button></div>
@@ -58,10 +58,14 @@
 <dialog id="deployment" class="deployment-dialog" aria-labelledby="deployment-title">
     <div class="dialog-heading"><div><h2 id="deployment-title">一键部署</h2><p>复制命令，在目标 Linux 服务器上执行。</p></div><button id="close-deployment" class="icon-button" type="button" aria-label="关闭部署命令">×</button></div>
     <div class="dialog-body">
-        <div class="command-options"><div class="field"><label for="deploy-core">内核</label><select id="deploy-core"><option value="sing">sing-box（默认）</option><option value="xray">Xray</option></select></div><div class="field"><label for="deploy-language">安装语言</label><select id="deploy-language"><option value="zh">中文</option><option value="en">English</option></select></div></div>
+        <div class="command-options">
+            <div class="field"><label for="deploy-core">内核</label><select id="deploy-core"><option value="sing">sing-box（默认）</option><option value="xray">Xray</option></select></div>
+            <div class="field"><label><input id="deploy-multi-node" type="checkbox" checked> 多节点模式</label><p class="field-help">拉取该机器的全部绑定节点。关闭后只运行 ID 最小的一个。</p></div>
+            <div class="field"><label><input id="deploy-multi-panel" type="checkbox" checked> 多面板模式</label><p class="field-help">允许在已有面板的机器上追加绑定。</p></div>
+        </div>
         <div class="terminal"><div class="terminal-heading"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>bash</span><span class="terminal-label">部署命令</span></div><label class="sr-only" for="deploy-command">部署命令</label><textarea id="deploy-command" class="command" rows="7" readonly spellcheck="false"></textarea></div>
         <p id="command-status" class="field-help" role="status"></p><p id="deploy-error" class="form-error" role="alert" hidden></p>
-        <div class="deployment-note">命令包含此服务器的专属密钥。已有 AriNode 配置会先备份再替换；迁移旧程序请使用对应的迁移命令。</div>
+        <div class="deployment-note">注册码有效期 30 分钟。节点配置由 AriNode 注册后拉取。查看或移除本机绑定可用 <code>anctl panel list</code> 和 <code>anctl panel remove</code>。</div>
     </div>
     <div class="dialog-footer"><button id="done-deployment" class="button subtle" type="button">完成</button><button id="copy-command" class="button" type="button" disabled>复制命令</button></div>
 </dialog>

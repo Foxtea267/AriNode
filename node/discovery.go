@@ -1,6 +1,8 @@
 package node
 
 import (
+	"slices"
+
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/conf"
 	log "github.com/sirupsen/logrus"
@@ -21,6 +23,8 @@ func (n *Node) discoverBindingsLocked() []conf.NodeConfig {
 		if _, exists := templates[key]; !exists {
 			templates[key] = c
 			machines = append(machines, key)
+		} else if c.ApiConfig.NodeID == 0 {
+			templates[key] = c
 		}
 	}
 	for _, key := range machines {
@@ -34,7 +38,7 @@ func (n *Node) discoverBindingsLocked() []conf.NodeConfig {
 			log.WithFields(log.Fields{"panel": template.ApiConfig.APIHost, "machine_id": template.ApiConfig.MachineID}).WithError(err).Warn("Machine discovery failed; preserving existing nodes")
 			seen := map[string]bool{}
 			for _, c := range n.configured {
-				if c.ApiConfig.Cluster == nil && machineKey(c) == key {
+				if c.ApiConfig.NodeID > 0 && c.ApiConfig.Cluster == nil && machineKey(c) == key {
 					desired = append(desired, c)
 					seen[bindingKey(c)] = true
 				}
@@ -45,6 +49,10 @@ func (n *Node) discoverBindingsLocked() []conf.NodeConfig {
 				}
 			}
 			continue
+		}
+		if template.ApiConfig.SingleMachineNode && len(bindings) > 1 {
+			slices.SortFunc(bindings, func(a, b panel.MachineNode) int { return a.ID - b.ID })
+			bindings = bindings[:1]
 		}
 		for _, binding := range bindings {
 			c := template

@@ -119,6 +119,7 @@ namespace {
     require __DIR__ . '/../AriNode/Services/Deployment.php';
     require __DIR__ . '/../AriNode/Controllers/AdminController.php';
     require __DIR__ . '/../AriNode/Controllers/ConfigController.php';
+    require __DIR__ . '/../AriNode/Controllers/EnrollmentController.php';
     require __DIR__ . '/../AriNode/routes/api.php';
     require __DIR__ . '/../AriNode/routes/web.php';
     $routes = [];
@@ -129,6 +130,7 @@ namespace {
     }
     check($routes['/arinode/admin']->methods() === ['GET', 'HEAD'], 'HTML shell route missing');
     check(in_array('server.v2', $routes['/api/v1/arinode/node/config']->gatherMiddleware(), true), 'Configuration download is not machine authenticated');
+    check(in_array('throttle:30,1', $routes['/api/v1/arinode/enroll']->gatherMiddleware(), true), 'Enrollment is not rate limited');
     $updateRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/update');
     check(count($updateRoutes) === 2, 'Update must provide separate GET check and POST install routes');
     foreach ($updateRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected update route'); }
@@ -144,6 +146,11 @@ namespace {
             'protocol_settings'=>['version'=>2]]);
     }
     $controller = new AdminController();
+    $enrollment = new \Plugin\AriNode\Controllers\EnrollmentController();
+    $codeFrom = function (string $command): string {
+        check((bool) preg_match("/ '([A-Za-z0-9_-]+\.[a-f0-9]{64})'$/", $command, $parts), 'Missing enrollment code');
+        return $parts[1];
+    };
     check(data($controller->entry())['data'][0]['url'] === '/arinode/admin', 'Plugin menu entry points to the wrong page');
     $saved = data($controller->save(req(['name'=>'US-01','notes'=>'US / 192.0.2.1','node_ids'=>[1,2]])));
     $id = $saved['data']['id']; $machine = ServerMachine::findOrFail($id);
@@ -175,14 +182,18 @@ namespace {
     rejects(fn() => $downloads->download($downloadRequest), HttpException::class);
     $changedNode->machine_id = $id; $changedNode->save();
     $command = data($controller->command(req(['id'=>$id])))['data']['command'];
-    check(str_contains($command, Deployment::INSTALLER) && str_contains($command, "ARINODE_NODES='vless:1 anytls:2'"), 'Command missing installer/nodes');
-    check(str_contains($command,"ARINODE_CORE='sing'") && str_contains($command,"ARINODE_INSTALL_MODE='fresh'") && str_contains($command,"ARINODE_MACHINE_ID='{$id}'"), 'Default deployment flags incorrect');
+    check(str_contains($command, Deployment::INSTALLER) && str_contains($command, '--enroll')
+        && !str_contains($command, 'ARINODE_NODES') && !str_contains($command, $machine->token), 'Command exposed machine configuration');
+    $code = $codeFrom($command);
+    $registered = data($enrollment->enroll(req(['code'=>$code])));
+    check($registered === ['machine_id'=>$id,'token'=>$machine->token,'core'=>'sing','multi_node'=>true,'multi_panel'=>true], 'Enrollment credentials or defaults incorrect');
+    check($enrollment->enroll(req(['code'=>$code . 'a']))->getStatusCode() === 403, 'Tampered enrollment accepted');
     check(str_contains($command, "sub'\"'\"'path'"), 'Panel URL was not shell quoted');
     rejects(fn() => $controller->command(req(['id'=>$id,'core'=>'xray'])), ValidationException::class);
 
     $count = ServerMachine::count();
     foreach ([['name'=>'Conflict','node_ids'=>[3]],['name'=>'Unknown','node_ids'=>[999]],['name'=>'Unsupported','node_ids'=>[4]],
-        ['name'=>'Dup','node_ids'=>[1,1]],['name'=>'','node_ids'=>[1]],['name'=>'Bad','node_ids_text'=>[1]],['name'=>'Empty','node_ids'=>[]]] as $payload) {
+        ['name'=>'Dup','node_ids'=>[1,1]],['name'=>'','node_ids'=>[1]],['name'=>'Bad','node_ids_text'=>[1]]] as $payload) {
         rejects(fn() => $controller->save(req($payload)), ValidationException::class);
         check(ServerMachine::count() === $count && Server::find(3)->machine_id === $other->id, 'Failed save mutated a different machine');
     }
@@ -193,8 +204,9 @@ namespace {
     check(Server::find(1)->machine_id === null && Server::find(2)->machine_id === $id && Server::find(5)->machine_id === $id, 'Binding replacement incorrect');
     check(Server::find(3)->machine_id === $other->id, 'Another machine changed');
     check(ServerMachine::find($id)->token === $machine->token, 'Editing rotated the original machine token');
-    $command = data($controller->command(req(['id'=>$id,'language'=>'en'])))['data']['command'];
-    check(str_contains($command,"ARINODE_LANGUAGE='en'") && str_contains($command,'hysteria2:5'), 'HY2 or language normalization incorrect');
+    $command = data($controller->command(req(['id'=>$id,'multi_node'=>false,'multi_panel'=>false])))['data']['command'];
+    $registered = data($enrollment->enroll(req(['code'=>$codeFrom($command)])));
+    check($registered['multi_node'] === false && $registered['multi_panel'] === false && !str_contains($command, 'hysteria2:5'), 'Deployment mode flags were lost');
     $inventory = data($controller->servers(req(['search'=>'US updated','pageSize'=>1])));
     check($inventory['total'] === 1 && count($inventory['data']) === 1 && !isset($inventory['data'][0]['token']), 'Inventory filtering/secret shape incorrect');
     check($inventory['data'][0]['node_ids_text'] === '2,5' && $inventory['data'][0]['install_command'] !== '', 'Native CRUD deployment row incomplete');
@@ -207,6 +219,7 @@ namespace {
     $saved = data($controller->save(req(['id'=>$id,'name'=>'US updated','node_ids'=>[2,5],'is_active'=>false])));
     check($saved['warning'] !== null && !ServerMachine::find($id)->is_active, 'Post-commit Redis failure lost a successful save');
     rejects(fn() => $controller->command(req(['id'=>$id])), HttpException::class);
+    check($enrollment->enroll(req(['code'=>$code]))->getStatusCode() === 403, 'Disabled machine redeemed an earlier code');
     $disabledRow = data($controller->servers(req(['search'=>'US updated'])))['data'][0];
     check($disabledRow['install_command'] === '' && $disabledRow['deploy_error'] !== '', 'Disabled machine leaked an executable command');
     $controller->disabled = true;
@@ -218,8 +231,19 @@ namespace {
         rejects(fn() => Deployment::command($url,'token',$id,[Server::find(2)]), InvalidArgumentException::class);
     }
     rejects(fn() => Deployment::command('https://panel.example.com',"bad\nvalue",$id,[Server::find(2)]), InvalidArgumentException::class);
-    $quoted = Deployment::command('https://panel.example.com',"test'\$(touch /tmp/arinode-shell-injection)",$id,[Server::find(2)]);
-    check(str_contains($quoted,"test'\"'\"'\$(touch /tmp/arinode-shell-injection)'"), 'Token shell injection was not escaped');
+    $empty = data($controller->save(req(['name'=>'Unassigned','node_ids'=>[]])))['data']['id'];
+    check(Server::where('machine_id', $empty)->count() === 0, 'New machine must allow no node bindings');
+    $quoted = data($controller->command(req(['id'=>$empty])))['data']['command'];
+    $emptyCode = $codeFrom($quoted);
+    check(data($enrollment->enroll(req(['code'=>$emptyCode])))['machine_id'] === $empty, 'Empty machine could not enroll');
+    ServerMachine::whereKey($empty)->update(['token'=>'rotated']);
+    check($enrollment->enroll(req(['code'=>$emptyCode]))->getStatusCode() === 403, 'A rotated machine token did not revoke an earlier code');
+    [$encoded] = explode('.', $emptyCode);
+    $expired = json_decode(base64_decode(strtr($encoded, '-_', '+/')), true);
+    $expired['exp'] = time() - 1;
+    $encoded = rtrim(strtr(base64_encode(json_encode($expired)), '+/', '-_'), '=');
+    $expiredCode = $encoded . '.' . hash_hmac('sha256', 'arinode-enroll-v1:' . $encoded, config('app.key'));
+    check($enrollment->enroll(req(['code'=>$expiredCode]))->getStatusCode() === 403, 'Expired signed enrollment accepted');
 
     if (PHP_OS_FAMILY !== 'Windows') {
         // Execute the generated pipeline with harmless curl/sudo fixtures. This
@@ -228,7 +252,7 @@ namespace {
         file_put_contents($bin . '/curl', <<<'SH'
 #!/bin/sh
 cat <<'INSTALLER'
-printf '%s\n' "$ARINODE_PANEL_TOKEN" "$ARINODE_NODES" "$ARINODE_CORE"
+printf '%s\n' "$@"
 INSTALLER
 SH
         );
@@ -238,7 +262,7 @@ SH
         $proc = proc_open(['bash','-c',$quoted],[1=>['pipe','w'],2=>['pipe','w']],$pipes,null,['PATH'=>$bin . ':' . getenv('PATH')]);
         $output = stream_get_contents($pipes[1]); $error = stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]);
         check(proc_close($proc) === 0 && $error === '', 'Generated pipeline failed');
-        check(explode("\n",trim($output)) === ["test'\$(touch /tmp/arinode-shell-injection)",'anytls:2','sing'], 'Shell expanded or lost deployment values');
+        check(explode("\n",trim($output)) === ['--enroll',"https://panel.example.com/sub'path",$emptyCode], 'Shell expanded or lost deployment values');
     }
 
     $html = $controller->page();

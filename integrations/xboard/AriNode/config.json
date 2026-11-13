@@ -1,7 +1,7 @@
 {
   "name": "AriNode 服务器管理",
   "code": "ari_node",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "服务器管理、节点绑定、配置自动下发与热更新、一键部署和插件在线更新；页面：/arinode/admin",
   "author": "AriNode",
   "type": "feature",
@@ -34,7 +34,7 @@
       ],
       "form":{
         "name":{"type":"string","label":"服务器名称","placeholder":"例如 US-01","required":true},
-        "node_ids_text":{"type":"string","label":"绑定节点 ID","placeholder":"例如 258,259","description":"在可绑定节点页面查看 ID；多个 ID 用逗号分隔。","required":true},
+        "node_ids_text":{"type":"string","label":"绑定节点 ID","placeholder":"留空可先部署","description":"多个 ID 用逗号分隔。","required":false},
         "notes":{"type":"text","label":"备注 / IP 或域名"},
         "is_active":{"type":"boolean","label":"启用服务器","value":true}
       },

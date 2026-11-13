@@ -2,7 +2,7 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.6.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.7.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
 
 ## 配置自动下发
 
@@ -36,28 +36,38 @@ https://你的面板域名/arinode/admin
 
 ## 添加服务器
 
-1. 先在 XBoard 节点管理中创建、启用需要部署的节点，设置协议、端口、域名和用户分组。
-2. 点击 AriNode 页面右上角 **添加服务器**，在弹窗中填写名称和备注、勾选节点，点击 **保存并生成部署命令**。
-3. 插件创建原生机器记录，分配专属密钥并绑定节点；编辑已有记录时保留原密钥。它不改变节点的协议、用户分组或订阅配置。
-4. 默认使用 **sing-box**，也可选择 Xray。HY1/HY2/TUIC/AnyTLS/Mieru 要使用 sing-box，选择 Xray 时会明确报错。
-5. 点击 **复制命令**，在目标 Linux 服务器执行。安装语言、面板地址、机器密钥、节点类型 / ID 和内核均已填好，无需再回答安装问题。
+1. 在 AriNode 管理页点击 **添加服务器**，填写名称和备注。节点可以留空，部署后再回面板绑定。
+2. 点击 **保存并生成部署命令**，选择内核和模式。默认使用 sing-box。HY1/HY2/TUIC/AnyTLS/Mieru 使用 sing-box。
+3. 在目标 Linux 服务器执行复制的命令。AriNode 使用注册码向 HTTPS 面板注册，再自动拉取节点列表和配置。机器还没有绑定节点时，服务保持运行并等待下发。
 
 生成的命令采用下面的形式（示例值不能直接部署）：
 
 ```sh
-curl -fsSL 'https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/install.sh' | sudo env ARINODE_LANGUAGE='zh' ARINODE_INSTALL_MODE='fresh' ARINODE_PANEL_URL='https://panel.example.com' ARINODE_PANEL_TOKEN='MACHINE_TOKEN' ARINODE_MACHINE_ID='3' ARINODE_NODES='vless:1 anytls:2' ARINODE_CORE='sing' bash
+curl -fsSL 'https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/install.sh' | sudo bash -s -- --enroll 'https://panel.example.com' 'REGISTRATION_CODE'
 ```
 
-命令下载正式版并写入机器绑定配置，启动 `arinode.service`。它不会开启自动升级。命令含机器专属密钥，只向管理员返回；页面/API 使用 `no-store`，不写浏览器 URL、localStorage 或公开日志。所有命令参数都按 Linux shell 规则引用。
+注册码有效期 30 分钟，可在有效期内重试。生成命令需要管理员身份。安装器向面板兑换机器凭据，将它写入权限为 600 的本地配置。编辑机器后使用同一地址和机器 ID 再次注册，会更新该绑定。面板地址和机器 ID 都相同的注册只保留一条记录。
 
 服务器视图使用紧凑表格；“节点目录”可搜索协议、地址和节点归属。新增 / 编辑及部署命令使用独立弹窗，关闭命令弹窗即清空其中的密钥内容。右上角主题按钮可切换深浅色，默认跟随系统，并共享风控等插件的 `xboard_plugin_theme` 偏好。手机端表格按字段转换为纵向布局。概览中服务器数量对应当前搜索结果，最近上报时间仅统计当前页。
 
-该命令用于从零配置；目标机器已有 AriNode 配置时会先备份再替换，其他面板绑定不会自动合并。已有 [V2bX](v2bx-migration.md) 或 xboard-node 请使用对应迁移流程，不要用从零部署代替迁移。
+**多节点模式**拉取该机器的全部绑定节点。关闭后只运行节点 ID 最小的启用节点。**多面板模式**允许追加新面板，关闭时遇到其他绑定会报错。已支持注册的 AriNode 会热加载配置，首次从旧版本升级会重启服务。多个面板的节点需要使用可分别监听的端口。
+
+已有 [V2bX](v2bx-migration.md) 或 xboard-node 可使用对应迁移流程。DNS 多 IP 节点组使用独立的成员配置。
+
+## 在节点机管理面板
+
+```sh
+sudo anctl panel list
+sudo anctl panel remove https://panel.example.com
+sudo anctl panel remove <绑定ID>
+```
+
+列表显示地址、机器 ID 和节点模式。同地址存在多台逻辑机器时，用列表里的绑定 ID 精确移除。移除会从本机配置中删除对应凭据和绑定，停止它的节点，并清除 `/etc/arinode/managed-panels/<绑定ID>/` 中下载的配置和生成的证书缓存。运行中的服务由配置监听器处理卸载和清理。其他面板的文件继续保留。XBoard 的原生机器记录仍可在面板上管理。
 
 ## 编辑、状态与兼容
 
 - 编辑绑定只更新这台机器，不能直接抢占属于另一机器的节点；先在原机器中移除该绑定再转移。
-- 已部署 AriNode 的机器自动发现功能默认每 30 秒读取绑定变更。至少保留一个启用且受支持的节点才能生成部署命令。停用机器、无可用节点时不生成可执行命令。
+- AriNode 默认每 30 秒读取绑定变更。启用的机器即使没有节点也能生成命令。停用的机器无法兑换注册码。
 - 服务器列表展示原生机器 ID、启用状态、节点 ID 和最后上报时间。最后上报时间不能替代代理协议连接测试。
 - DNS 多 IP 共用一个节点仍使用 [节点组批量下发](node-cluster.md)，不通过原生单一 `machine_id` 把同一节点同时绑定到多台机器。
 - 原有 JSON 下发 `POST /api/v1/arinode/provision`、节点组、在线 IP 等接口继续保留。
@@ -71,7 +81,7 @@ curl -fsSL 'https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/ins
 | POST | `/api/v1/arinode/admin/servers/save` | 新增 / 编辑服务器及节点绑定 |
 | POST | `/api/v1/arinode/admin/command` | 按机器 ID、内核和语言生成命令 |
 
-保存请求：`{"name":"US-01","notes":"192.0.2.1","node_ids":[1,2],"is_active":true}`；编辑时增加 `"id":3`。生成命令：`{"id":3,"core":"sing","language":"zh"}`。全部使用 XBoard 原生 `admin` 中间件认证，返回 JSON 不缓存。
+保存时允许 `node_ids: []`。生成命令可传 `{"id":3,"core":"sing","multi_node":true,"multi_panel":true}`。这两项均使用原生 `admin` 中间件认证。注册接口 `POST /api/v1/arinode/enroll` 接收签名注册码，并检查有效期、机器启用状态和凭据是否已轮换。
 
 ## 验证
 

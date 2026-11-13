@@ -6,6 +6,9 @@ use Plugin\AriNode\Controllers\ClusterController;
 use Plugin\AriNode\Controllers\AdminController;
 use Plugin\AriNode\Controllers\UpdateController;
 use Plugin\AriNode\Controllers\ConfigController;
+use Plugin\AriNode\Controllers\EnrollmentController;
+
+Route::middleware('throttle:30,1')->post('/api/v1/arinode/enroll', [EnrollmentController::class, 'enroll']);
 
 Route::middleware('admin')->group(function () {
     Route::get('/api/v1/arinode/admin/update', [UpdateController::class, 'check']);

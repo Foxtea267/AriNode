@@ -17,6 +17,13 @@ entries = {"AriNode/" + path.relative_to(source).as_posix(): path.read_text(enco
            for path in sorted(source.rglob("*")) if path.is_file()}
 zip_path = root / "dist/arinode-xboard-plugin.zip"
 manifest_path = root / "dist/xboard-plugin-update.json"
+checksums_path = root / "dist/SHA256SUMS"
+
+def checksums(xboard: bytes) -> bytes:
+    komari = (root / "dist/arinode-komari-plugin.zip").read_bytes()
+    return (f"{hashlib.sha256(xboard).hexdigest()}  arinode-xboard-plugin.zip\n"
+            f"{hashlib.sha256(komari).hexdigest()}  arinode-komari-plugin.zip\n").encode()
+
 if args.check:
     # Deflate byte streams can differ between zlib/platform versions. Verify the
     # shipped archive's contents, then hash that archive, rather than recompressing.
@@ -31,6 +38,8 @@ if args.check:
                 "sha256": hashlib.sha256(payload).hexdigest(), "size": len(payload)}
     if json.loads(manifest_path.read_text(encoding="utf-8")) != expected:
         raise SystemExit("Stale plugin update manifest; run scripts/package-xboard-plugin.py")
+    if checksums_path.read_text(encoding="utf-8").encode() != checksums(payload):
+        raise SystemExit("Stale plugin checksums; run scripts/package-xboard-plugin.py")
     print(f"AriNode XBoard plugin {config['version']}: source, ZIP and SHA-256 manifest verified")
     raise SystemExit(0)
 
@@ -45,7 +54,7 @@ with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
 payload = buffer.getvalue()
 manifest = json.dumps({"code": config["code"], "version": config["version"],
                        "sha256": hashlib.sha256(payload).hexdigest(), "size": len(payload)}, indent=2) + "\n"
-outputs = {zip_path: payload, manifest_path: manifest.encode()}
+outputs = {zip_path: payload, manifest_path: manifest.encode(), checksums_path: checksums(payload)}
 for path, content in outputs.items():
     path.write_bytes(content)
 print(f"AriNode XBoard plugin {config['version']}: ZIP and SHA-256 manifest built")

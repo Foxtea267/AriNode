@@ -15,7 +15,7 @@ func (c *Client) GetMachineNodes() ([]MachineNode, error) {
 	if c.MachineID <= 0 {
 		return nil, fmt.Errorf("machine ID is required")
 	}
-	r, err := c.client.R().SetBody(map[string]any{"token": c.Token, "machine_id": c.MachineID}).Post("/api/v2/server/machine/nodes")
+	r, err := c.client.R().SetHeader("Accept", "application/json").SetBody(map[string]any{"token": c.Token, "machine_id": c.MachineID}).Post("/api/v2/server/machine/nodes")
 	if err != nil {
 		return nil, fmt.Errorf("machine discovery request failed")
 	}
@@ -32,6 +32,9 @@ func (c *Client) GetMachineNodes() ([]MachineNode, error) {
 	for i := range *data.Nodes {
 		n := &(*data.Nodes)[i]
 		n.Type = strings.ToLower(n.Type)
+		if n.Type == "v2ray" {
+			n.Type = "vmess"
+		}
 		if n.ID <= 0 || n.Type == "" || seen[n.ID] {
 			return nil, fmt.Errorf("invalid or duplicate machine node")
 		}

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/conf"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,13 +18,7 @@ func (c *Controller) savePanelConfig(info *panel.NodeInfo) {
 	if info == nil || !info.PanelManaged || len(info.RawConfig) == 0 {
 		return
 	}
-	root := c.PanelConfigPath
-	if root == "" {
-		root = "/etc/arinode/panel-config"
-	}
-	namespace := fmt.Sprintf("%s|machine=%d|node=%d", c.apiClient.APIHost, c.apiClient.MachineID, info.Id)
-	digest := sha256.Sum256([]byte(namespace))
-	path := filepath.Join(root, fmt.Sprintf("%x.json", digest))
+	path := panelConfigFile(c.PanelConfigPath, c.apiClient.APIHost, c.apiClient.MachineID, info.Id)
 	changed, err := writePanelConfig(path, append(append([]byte(nil), info.RawConfig...), '\n'))
 	if err != nil {
 		log.WithError(err).WithField("node_id", info.Id).Warn("Node configuration applied but local snapshot could not be saved; will retry")
@@ -32,6 +27,29 @@ func (c *Controller) savePanelConfig(info *panel.NodeInfo) {
 	if changed {
 		log.WithFields(log.Fields{"node_id": info.Id, "config_hash": info.ConfigHash, "config_path": path}).Info("Panel configuration synchronized and applied")
 	}
+}
+
+func panelConfigFile(root, host string, machine, id int) string {
+	if root == "" {
+		root = "/etc/arinode/panel-config"
+	}
+	namespace := fmt.Sprintf("%s|machine=%d|node=%d", host, machine, id)
+	digest := sha256.Sum256([]byte(namespace))
+	return filepath.Join(root, fmt.Sprintf("%x.json", digest))
+}
+
+// Delete the exact downloaded node file. Local includes and certificate paths
+// supplied by the operator are not owned by this cache.
+func RemovePanelSnapshot(c conf.NodeConfig) error {
+	a := c.ApiConfig
+	if a.NodeID <= 0 {
+		return nil
+	}
+	err := os.Remove(panelConfigFile(c.Options.PanelConfigPath, a.APIHost, a.MachineID, a.NodeID))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 func writePanelConfig(path string, data []byte) (bool, error) {

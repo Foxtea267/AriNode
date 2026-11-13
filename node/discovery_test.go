@@ -112,3 +112,70 @@ func TestClusterDiscoveryOnlyStartsExplicitSharedNode(t *testing.T) {
 		t.Fatal("mixed bindings duplicated or changed the shared node")
 	}
 }
+
+func TestRegisteredMachineDiscoversNodesWithoutLocalSeed(t *testing.T) {
+	var assigned atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/server/machine/nodes":
+			if r.URL.Query().Has("node_id") {
+				t.Error("machine-only request sent a node ID")
+			}
+			if assigned.Load() {
+				fmt.Fprint(w, `{"nodes":[{"id":3,"type":"vless"},{"id":2,"type":"vless"}]}`)
+			} else {
+				fmt.Fprint(w, `{"nodes":[]}`)
+			}
+		case "/api/v1/arinode/node/config":
+			w.Header().Set("X-AriNode-Config", "1")
+			fmt.Fprint(w, `{"server_port":12345}`)
+		case "/api/v2/server/user":
+			fmt.Fprint(w, `{"users":[]}`)
+		case "/api/v2/server/alivelist":
+			fmt.Fprint(w, `{"alive":{}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	other := nodePanel(t)
+	defer other.Close()
+	limiter.Init()
+	n := New()
+	managed := testConfig(server.URL, "", 0, 7)
+	managed.Options.PanelConfigPath = t.TempDir()
+	managed.ApiConfig.SingleMachineNode = true
+	unrelated := testConfig(other.URL, "vless", 1, 0)
+	if err := n.Start([]conf.NodeConfig{managed, unrelated}, &fakeCore{}); err != nil {
+		t.Fatal(err)
+	}
+	defer n.Close()
+	healthy := n.entries[0].controller
+	if len(n.Snapshot()) != 1 {
+		t.Fatal("empty machine started an inbound")
+	}
+	assigned.Store(true)
+	if err := n.Reconcile([]conf.NodeConfig{managed, unrelated}); err != nil {
+		t.Fatal(err)
+	}
+	if s := n.Snapshot(); len(s) != 2 || s[1].NodeID != 2 || s[1].State != "running" {
+		t.Fatalf("single-node discovery failed: %+v", s)
+	}
+	first := n.entries[1].controller
+	managed.ApiConfig.SingleMachineNode = false
+	if err := n.Reconcile([]conf.NodeConfig{managed, unrelated}); err != nil {
+		t.Fatal(err)
+	}
+	if len(n.Snapshot()) != 3 || n.entries[0].controller != healthy || n.entries[2].controller != first {
+		t.Fatal("multi-node discovery disturbed the other panel")
+	}
+	if err := n.Reconcile([]conf.NodeConfig{unrelated}); err != nil {
+		t.Fatal(err)
+	}
+	if len(n.Snapshot()) != 1 || n.entries[0].controller != healthy {
+		t.Fatal("removing the registered machine affected a different panel")
+	}
+	if err := n.Reconcile(nil, true); err != nil || len(n.Snapshot()) != 0 {
+		t.Fatalf("removing the last binding did not leave an idle service: %v", err)
+	}
+}

@@ -17,6 +17,7 @@ type Selector struct {
 	nodes        sync.Map
 	fallbackMu   sync.Mutex
 	fallbackXray Core
+	fallbackSing Core
 	closed       bool
 }
 
@@ -85,6 +86,11 @@ func (s *Selector) Close() error {
 			errs = append(errs, err)
 		}
 	}
+	if s.fallbackSing != nil {
+		if err := CloseSafely(s.fallbackSing); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -128,6 +134,13 @@ func (s *Selector) AddNode(tag string, info *panel.NodeInfo, option *conf.Option
 				}
 			}
 		}
+		if core == nil && option.ManagedPanel && (option.Core == "xray" || option.Core == "sing") {
+			var err error
+			core, err = s.defaultCore(option.Core)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	if core == nil {
 		return fmt.Errorf("requested core %q (name %q) is unavailable", option.Core, option.CoreName)
@@ -143,7 +156,7 @@ func (s *Selector) AddNode(tag string, info *panel.NodeInfo, option *conf.Option
 			return fmt.Errorf("named sing-box core %q does not support xhttp; select an Xray core", option.CoreName)
 		}
 		var err error
-		core, err = s.xhttpCore()
+		core, err = s.defaultCore("xray")
 		if err != nil {
 			return err
 		}
@@ -198,8 +211,8 @@ func (s *Selector) UpdateNodePolicy(tag string, info *panel.NodeInfo, options *c
 	return updater.UpdateNodePolicy(tag, info, &resolved)
 }
 
-func (s *Selector) xhttpCore() (Core, error) {
-	if configured := s.cores["xray"]; configured != nil && configured.Type() == "xray" {
+func (s *Selector) defaultCore(kind string) (Core, error) {
+	if configured := s.cores[kind]; configured != nil && configured.Type() == kind {
 		return configured, nil
 	}
 	names := make([]string, 0, len(s.cores))
@@ -208,7 +221,7 @@ func (s *Selector) xhttpCore() (Core, error) {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		if configured := s.cores[name]; configured.Type() == "xray" {
+		if configured := s.cores[name]; configured.Type() == kind {
 			return configured, nil
 		}
 	}
@@ -217,22 +230,28 @@ func (s *Selector) xhttpCore() (Core, error) {
 	if s.closed {
 		return nil, errors.New("core selector is closed")
 	}
-	if s.fallbackXray != nil {
-		return s.fallbackXray, nil
+	cache := &s.fallbackXray
+	config := conf.CoreConfig{Type: "xray", XrayConfig: conf.NewXrayConfig()}
+	if kind == "sing" {
+		cache = &s.fallbackSing
+		config = conf.DefaultCoreConfig()
 	}
-	factory := cores["xray"]
+	if *cache != nil {
+		return *cache, nil
+	}
+	factory := cores[kind]
 	if factory == nil {
-		return nil, errors.New("xhttp requires Xray, but this build does not include the Xray core")
+		return nil, fmt.Errorf("this build does not include the %s core", kind)
 	}
-	configured, err := createSafely(factory, &conf.CoreConfig{Type: "xray", XrayConfig: conf.NewXrayConfig()})
+	configured, err := createSafely(factory, &config)
 	if err != nil {
-		return nil, fmt.Errorf("initialize xhttp Xray core: %w", err)
+		return nil, fmt.Errorf("initialize %s core: %w", kind, err)
 	}
 	if err := StartSafely(configured); err != nil {
 		_ = CloseSafely(configured)
-		return nil, fmt.Errorf("start xhttp Xray core: %w", err)
+		return nil, fmt.Errorf("start %s core: %w", kind, err)
 	}
-	s.fallbackXray = configured
+	*cache = configured
 	return configured, nil
 }
 

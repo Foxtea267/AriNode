@@ -40,44 +40,68 @@ final class Deployment
         return "'" . str_replace("'", "'\"'\"'", $value) . "'";
     }
 
-    public static function command(string $panel, string $token, int $machineId, iterable $servers, string $core = 'sing', string $language = 'zh'): string
+    public static function command(string $panel, string $token, int $machineId, iterable $servers, string $core = 'sing', bool $multiNode = true, bool $multiPanel = true): string
     {
         $panel = rtrim($panel, '/');
         $url = parse_url($panel);
-        if (!$url || !in_array($url['scheme'] ?? '', ['http', 'https'], true) || empty($url['host']) || isset($url['user']) || isset($url['pass']) || isset($url['query']) || isset($url['fragment'])) {
-            throw new InvalidArgumentException('Panel URL must be an absolute http(s) URL without credentials, query or fragment');
+        if (!$url || ($url['scheme'] ?? '') !== 'https' || empty($url['host']) || isset($url['user']) || isset($url['pass']) || isset($url['query']) || isset($url['fragment'])) {
+            throw new InvalidArgumentException('Panel enrollment requires an HTTPS address without credentials, query or fragment');
         }
-        if ($token === '' || $machineId <= 0) {
+        if ($token === '' || strpbrk($token, "\0\r\n") !== false || $machineId <= 0) {
             throw new InvalidArgumentException('Machine token and a positive machine ID are required');
         }
-        if (!in_array($language, ['zh', 'en'], true)) {
-            throw new InvalidArgumentException('Language must be zh or en');
-        }
-        $nodes = [];
+        self::validateProtocol('vless', $core);
         foreach ($servers as $server) {
             $type = self::nodeType($server);
             self::validateProtocol($type, $core);
             if (!$server->enabled || (int) $server->machine_id !== $machineId || (int) $server->id <= 0) {
                 throw new InvalidArgumentException('Deployment nodes must be enabled and bound to this machine');
             }
-            $nodes[] = $type . ':' . $server->id;
         }
-        if (!$nodes) {
-            throw new InvalidArgumentException('Bind at least one enabled node before deploying');
+        $code = self::issue($machineId, $token, $core, $multiNode, $multiPanel);
+        return 'curl -fsSL ' . self::quote(self::INSTALLER) . ' | sudo bash -s -- --enroll ' . self::quote($panel) . ' ' . self::quote($code);
+    }
+
+    private static function issue(int $id, string $token, string $core, bool $multiNode, bool $multiPanel): string
+    {
+        $payload = ['id' => $id, 'exp' => time() + 1800, 'key' => self::credentialFingerprint($token),
+            'core' => $core, 'multi_node' => $multiNode, 'multi_panel' => $multiPanel];
+        $body = rtrim(strtr(base64_encode(json_encode($payload, JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
+        return $body . '.' . self::signature($body);
+    }
+
+    public static function verify(string $code): array
+    {
+        if (!preg_match('/\A([A-Za-z0-9_-]{1,950})\.([a-f0-9]{64})\z/', $code, $parts)
+            || !hash_equals(self::signature($parts[1]), $parts[2])) {
+            throw new InvalidArgumentException('Invalid enrollment code');
         }
-        $env = [
-            'ARINODE_LANGUAGE' => $language,
-            'ARINODE_INSTALL_MODE' => 'fresh',
-            'ARINODE_PANEL_URL' => $panel,
-            'ARINODE_PANEL_TOKEN' => $token,
-            'ARINODE_MACHINE_ID' => (string) $machineId,
-            'ARINODE_NODES' => implode(' ', array_unique($nodes)),
-            'ARINODE_CORE' => $core,
-        ];
-        $parts = [];
-        foreach ($env as $key => $value) {
-            $parts[] = $key . '=' . self::quote($value);
+        $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/'), true) ?: '', true);
+        if (!is_array($payload) || !is_int($payload['id'] ?? null) || $payload['id'] < 1
+            || !is_int($payload['exp'] ?? null) || $payload['exp'] <= time()
+            || !is_string($payload['key'] ?? null) || !in_array($payload['core'] ?? null, ['sing', 'xray'], true)
+            || !is_bool($payload['multi_node'] ?? null) || !is_bool($payload['multi_panel'] ?? null)) {
+            throw new InvalidArgumentException('Invalid or expired enrollment code');
         }
-        return 'curl -fsSL ' . self::quote(self::INSTALLER) . ' | sudo env ' . implode(' ', $parts) . ' bash';
+        return $payload;
+    }
+
+    private static function signature(string $body): string
+    {
+        return self::sign('arinode-enroll-v1:' . $body);
+    }
+
+    public static function credentialFingerprint(string $token): string
+    {
+        return self::sign('arinode-machine-token-v1:' . $token);
+    }
+
+    private static function sign(string $value): string
+    {
+        $key = (string) config('app.key');
+        if ($key === '') {
+            throw new InvalidArgumentException('XBoard application key is required');
+        }
+        return hash_hmac('sha256', $value, $key);
     }
 }

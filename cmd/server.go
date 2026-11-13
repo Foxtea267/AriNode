@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -98,7 +99,7 @@ func serverHandle(_ *cobra.Command, _ []string) {
 	defer dynamic.Close()
 	nodes := node.New()
 	nodes.UseDynamicOutbounds(dynamic)
-	err = nodes.Start(c.NodeConfig, vc)
+	err = nodes.Start(c.NodeConfig, vc, c.AllowEmpty)
 	if err != nil {
 		log.WithField("err", err).Error("Run nodes failed")
 		return
@@ -127,15 +128,16 @@ func serverHandle(_ *cobra.Command, _ []string) {
 			if c.DSOMStatePath != next.DSOMStatePath {
 				return fmt.Errorf("DSOMStatePath changed; restart to change the history directory")
 			}
-			if err := node.ValidateBindings(next.NodeConfig); err != nil {
+			if err := node.ValidateBindings(next.NodeConfig, next.AllowEmpty); err != nil {
 				return err
 			}
 			if err := dynamic.Reconcile(next.DynamicOutbounds); err != nil {
 				return err
 			}
-			if err := nodes.Reconcile(next.NodeConfig); err != nil {
+			if err := nodes.Reconcile(next.NodeConfig, next.AllowEmpty); err != nil {
 				return err
 			}
+			removeDisconnectedPanelFiles(c, next, filepath.Dir(config))
 			monitors.Reconcile(next.Komari)
 			log.Info("Node bindings reconciled")
 			runtime.GC()
@@ -156,6 +158,28 @@ func serverHandle(_ *cobra.Command, _ []string) {
 		// Stop DSOM probes immediately, before waiting for older node reporting
 		// tasks to finish their own shutdown.
 		dynamic.Close()
+	}
+}
+
+func removeDisconnectedPanelFiles(previous, next *conf.Conf, root string) {
+	active := make(map[string]bool)
+	for _, binding := range next.BindingPanels() {
+		active[binding.ID] = true
+	}
+	for _, binding := range previous.Machines {
+		if !active[binding.ID()] {
+			if err := binding.RemoveCache(root); err != nil {
+				log.WithError(err).Warn("Remove disconnected panel cache")
+			}
+		}
+	}
+	for _, n := range previous.NodeConfig {
+		a := n.ApiConfig
+		if !active[conf.PanelBindingID(a.APIHost, a.MachineID)] {
+			if err := node.RemovePanelSnapshot(n); err != nil {
+				log.WithError(err).Warn("Remove disconnected panel snapshot")
+			}
+		}
 	}
 }
 
@@ -190,6 +214,9 @@ func serveStatus(address string, nodes *node.Node, monitors *komari.Manager, man
 		bindings := nodes.Snapshot()
 		komariBindings := monitors.Snapshot()
 		state := "running"
+		if len(bindings) == 0 {
+			state = "waiting"
+		}
 		for _, binding := range bindings {
 			if binding.State != "running" {
 				state = "degraded"

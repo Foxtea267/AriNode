@@ -27,6 +27,7 @@ type rawNodeConfig struct {
 }
 
 type ApiConfig struct {
+	SingleMachineNode   bool           `json:"-"`
 	Cluster             *ClusterConfig `json:"Cluster,omitempty"`
 	APIHost             string         `json:"ApiHost"`
 	APISendIP           string         `json:"ApiSendIP"`
@@ -112,6 +113,7 @@ func (n *NodeConfig) UnmarshalJSON(data []byte) (err error) {
 }
 
 type Options struct {
+	ManagedPanel           bool                         `json:"-"`
 	Name                   string                       `json:"Name"`
 	Core                   string                       `json:"Core"`
 	CoreName               string                       `json:"CoreName"`

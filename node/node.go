@@ -55,8 +55,8 @@ type Node struct {
 // inbounds; the native SOCKS outbound always targets a stable loopback listener.
 func (n *Node) UseDynamicOutbounds(manager *dsom.Manager) { n.dynamic = manager }
 
-func ValidateBindings(nodes []conf.NodeConfig) error {
-	if len(nodes) == 0 {
+func ValidateBindings(nodes []conf.NodeConfig, idle ...bool) error {
+	if len(nodes) == 0 && (len(idle) == 0 || !idle[0]) {
 		return fmt.Errorf("no node bindings configured")
 	}
 	return validateBindings(nodes)
@@ -89,11 +89,8 @@ func newManaged(c conf.NodeConfig) *managedNode {
 }
 
 // Start attempts every binding. A failed binding stays pending for automatic retry.
-func (n *Node) Start(nodes []conf.NodeConfig, core vCore.Core) error {
-	if len(nodes) == 0 {
-		return fmt.Errorf("no node bindings configured")
-	}
-	if err := validateBindings(nodes); err != nil {
+func (n *Node) Start(nodes []conf.NodeConfig, core vCore.Core, idle ...bool) error {
+	if err := ValidateBindings(nodes, idle...); err != nil {
 		return err
 	}
 	n.mu.Lock()
@@ -220,11 +217,8 @@ func (n *Node) publishLocked() {
 }
 
 // Reconcile preserves unchanged bindings and only restarts added or changed ones.
-func (n *Node) Reconcile(nodes []conf.NodeConfig) error {
-	if len(nodes) == 0 {
-		return fmt.Errorf("no node bindings configured")
-	}
-	if err := validateBindings(nodes); err != nil {
+func (n *Node) Reconcile(nodes []conf.NodeConfig, idle ...bool) error {
+	if err := ValidateBindings(nodes, idle...); err != nil {
 		return err
 	}
 	n.mu.Lock()
@@ -259,10 +253,23 @@ func (n *Node) reconcileLocked(nodes []conf.NodeConfig) {
 		}
 		next = append(next, newManaged(c))
 	}
+	// A protocol change can replace a controller while retaining the same
+	// snapshot path. Only clear files that no desired binding owns.
+	snapshotPaths := make(map[string]bool, len(next))
+	for _, entry := range next {
+		a := entry.config.ApiConfig
+		snapshotPaths[panelConfigFile(entry.config.Options.PanelConfigPath, a.APIHost, a.MachineID, a.NodeID)] = true
+	}
 	for _, entry := range old {
 		if entry.controller != nil {
 			if err := closeController(entry.controller); err != nil {
 				log.WithError(err).Warn("Close removed node failed")
+			}
+		}
+		a := entry.config.ApiConfig
+		if !snapshotPaths[panelConfigFile(entry.config.Options.PanelConfigPath, a.APIHost, a.MachineID, a.NodeID)] {
+			if err := RemovePanelSnapshot(entry.config); err != nil {
+				log.WithError(err).Warn("Remove unbound node snapshot")
 			}
 		}
 	}
@@ -298,6 +305,10 @@ func bindingConfigEqual(a, b conf.NodeConfig) bool {
 	}
 	a.Options.RawOptions = nil
 	b.Options.RawOptions = nil
+	// This flag selects the discovery result. An already-selected inbound
+	// does not need to restart when the machine adds more sibling nodes.
+	a.ApiConfig.SingleMachineNode = false
+	b.ApiConfig.SingleMachineNode = false
 	return reflect.DeepEqual(a, b)
 }
 

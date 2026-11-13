@@ -99,7 +99,7 @@ class AdminController extends PluginController
         $params = $request->validate([
             'id' => 'sometimes|nullable|integer|min:1', 'name' => 'required|string|max:255',
             'notes' => 'sometimes|nullable|string|max:4000', 'is_active' => 'sometimes|boolean',
-            'node_ids' => 'required|array|min:1|max:100', 'node_ids.*' => 'required|integer|min:1|distinct',
+            'node_ids' => 'present|array|max:100', 'node_ids.*' => 'required|integer|min:1|distinct',
         ]);
         $id = DB::transaction(function () use ($params) {
             $machine = !empty($params['id']) ? ServerMachine::query()->lockForUpdate()->findOrFail($params['id']) : new ServerMachine();
@@ -140,12 +140,14 @@ class AdminController extends PluginController
     public function command(Request $request): JsonResponse
     {
         $this->enabled();
-        $params = $request->validate(['id' => 'required|integer|min:1', 'core' => 'sometimes|in:sing,xray', 'language' => 'sometimes|in:zh,en']);
+        $params = $request->validate(['id' => 'required|integer|min:1', 'core' => 'sometimes|in:sing,xray',
+            'multi_node' => 'sometimes|boolean', 'multi_panel' => 'sometimes|boolean']);
         $machine = ServerMachine::query()->with('servers')->findOrFail($params['id']);
         abort_unless($machine->is_active, 422, 'Server is disabled');
         try {
             $command = Deployment::command($this->panelUrl($request), $machine->token, $machine->id,
-                $machine->servers->where('enabled', true), $params['core'] ?? 'sing', $params['language'] ?? 'zh');
+                $machine->servers->where('enabled', true), $params['core'] ?? 'sing',
+                (bool) ($params['multi_node'] ?? true), (bool) ($params['multi_panel'] ?? true));
         } catch (InvalidArgumentException $e) {
             throw ValidationException::withMessages(['command' => $e->getMessage()]);
         }

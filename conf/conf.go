@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Foxtea267/AriNode/common/json5"
@@ -14,13 +15,15 @@ import (
 )
 
 type Conf struct {
-	LogConfig        LogConfig       `json:"Log"`
-	CoresConfig      []CoreConfig    `json:"Cores"`
-	Panels           []PanelBinding  `json:"Panels,omitempty"`
-	Komari           []KomariBinding `json:"Komari,omitempty"`
-	NodeConfig       []NodeConfig    `json:"Nodes"`
-	DynamicOutbounds []dsom.Config   `json:"DynamicOutbounds,omitempty"`
-	DSOMStatePath    string          `json:"DSOMStatePath,omitempty"`
+	AllowEmpty       bool             `json:"AllowEmpty,omitempty"`
+	LogConfig        LogConfig        `json:"Log"`
+	CoresConfig      []CoreConfig     `json:"Cores"`
+	Panels           []PanelBinding   `json:"Panels,omitempty"`
+	Machines         []MachineBinding `json:"Machines,omitempty"`
+	Komari           []KomariBinding  `json:"Komari,omitempty"`
+	NodeConfig       []NodeConfig     `json:"Nodes"`
+	DynamicOutbounds []dsom.Config    `json:"DynamicOutbounds,omitempty"`
+	DSOMStatePath    string           `json:"DSOMStatePath,omitempty"`
 }
 
 type PanelBinding struct {
@@ -70,6 +73,9 @@ func (p *Conf) LoadFromPath(filePath string) error {
 		return err
 	}
 	if err := p.resolvePanels(); err != nil {
+		return err
+	}
+	if err := p.resolveMachines(filepath.Dir(filePath)); err != nil {
 		return err
 	}
 	if err := p.resolveKomari(); err != nil {

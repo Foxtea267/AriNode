@@ -70,6 +70,10 @@ func New(c *conf.ApiConfig) (*Client, error) {
 	// Check node type
 	c.NodeType = strings.ToLower(c.NodeType)
 	switch c.NodeType {
+	case "":
+		if c.MachineID <= 0 || c.NodeID != 0 {
+			return nil, fmt.Errorf("node type is required")
+		}
 	case "v2ray":
 		c.NodeType = "vmess"
 	case
@@ -92,7 +96,12 @@ func New(c *conf.ApiConfig) (*Client, error) {
 	} else {
 		params["node_type"] = c.NodeType
 	}
-	client.SetQueryParams(params)
+	if c.NodeID > 0 || c.MachineID <= 0 {
+		client.SetQueryParams(params)
+	} else {
+		client.SetRedirectPolicy(resty.NoRedirectPolicy())
+		client.SetRetryCount(0)
+	}
 	return &Client{
 		Cluster:   c.Cluster,
 		client:    client,

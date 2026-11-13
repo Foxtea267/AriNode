@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 The installer downloads and verifies the latest stable release, then asks for Chinese or English and a deployment mode: fresh setup, migration from an existing xbnode, or keeping an AriNode config. If `/etc/xboard-node/config.yml` exists, migration is the default. Migration reads that config and its `credentials.env` without asking for the Xboard URL or token, backs up any existing AriNode config, and switches systemd services with a restart attempt for xbnode if AriNode fails to start. Fresh setup asks for the Xboard URL, token (hidden input), nodes such as `vless:1 trojan:2`, and optional machine ID. The config is mode `0600`. Automatic upgrades stay off until explicitly enabled. Linux `amd64` or `arm64`, `curl`, `tar`, `sha256sum`, and `systemctl` are required.
 
-Run `sudo anctl bash` to reopen the language and deployment menu. Use `anctl status` and `anctl log` to check the service. For multiple Xboard or Komari panels, edit the [multi-binding config](example/multi-bindings.config.json) and run `sudo anctl restart`.
+Run `sudo anctl bash` to reopen the deployment menu. Use `anctl status` and `anctl log` to check the service. XBoard plugin 0.7.0 can enroll a machine before any nodes are assigned. The agent then pulls its bindings and node configuration. Enable multi-panel mode to append a panel, use `sudo anctl panel list` to view addresses, and run `sudo anctl panel remove ID` to remove one binding and its downloaded files. [XBoard deployment guide](docs/xboard-plugin.md)
 
 ## Quick start
 

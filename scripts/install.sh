@@ -5,11 +5,18 @@ repo='Foxtea267/AriNode'
 release_base="https://github.com/${repo}/releases/latest/download"
 config_path='/etc/arinode/config.json'
 service_path='/etc/systemd/system/arinode.service'
+enroll_panel=''
+enroll_code=''
 
 # Explicit modes work through curl | sudo bash -s -- without answering the
 # deployment menu. Language selection remains available on /dev/tty.
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --enroll)
+      [[ $# -ge 3 && -n $2 && -n $3 && -z $enroll_panel ]] || { printf 'Usage: --enroll PANEL_URL CODE\n' >&2; exit 1; }
+      enroll_panel="$2"
+      enroll_code="$3"
+      shift 2 ;;
     --migrate-v2bx) export ARINODE_INSTALL_MODE=migrate-v2bx ;;
     --migrate-xbnode) export ARINODE_INSTALL_MODE=migrate ;;
     --cluster-domain|--cluster-member)
@@ -26,7 +33,19 @@ need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
 [[ $(id -u) -eq 0 ]] || fail 'run as root (curl ... | sudo bash)'
 [[ $(uname -s) == Linux ]] || fail 'Linux is required'
-for command in curl tar sha256sum install systemctl awk mktemp cp mv rm; do need "$command"; done
+need systemctl
+if [[ -n $enroll_panel ]]; then
+  [[ -z ${ARINODE_INSTALL_MODE:-} && -z ${ARINODE_CLUSTER_DOMAIN:-} && -z ${ARINODE_CLUSTER_MEMBER:-} ]] || fail '--enroll cannot be combined with migration or cluster options'
+  if [[ -x /usr/local/bin/anctl && -x /usr/local/bin/arinode && -f $service_path ]] &&
+     [[ $(/usr/local/bin/anctl version) == "$(/usr/local/bin/arinode version)" ]] &&
+     /usr/local/bin/anctl panel enroll --help >/dev/null 2>&1; then
+    ARINODE_ENROLL_CODE="$enroll_code" /usr/local/bin/anctl panel enroll "$enroll_panel"
+    systemctl enable --now arinode.service
+    printf 'Panel registered. Check bindings with sudo anctl panel list\n'
+    exit 0
+  fi
+fi
+for command in curl tar sha256sum install awk mktemp cp mv rm; do need "$command"; done
 
 case "$(uname -m)" in
   x86_64|amd64) arch='amd64' ;;
@@ -61,6 +80,11 @@ version_line=$("${staging}/arinode" version)
 release_version=${BASH_REMATCH[1]}
 [[ $("${staging}/anctl" version) == "$version_line" ]] || fail 'arinode and anctl versions differ'
 printf 'Installing AriNode %s for linux/%s\n' "$release_version" "$arch"
+
+if [[ -n $enroll_panel ]]; then
+  "${staging}/anctl" panel enroll --help >/dev/null 2>&1 || fail 'latest stable version does not support panel enrollment yet'
+  ARINODE_ENROLL_CODE="$enroll_code" "${staging}/anctl" panel enroll "$enroll_panel"
+fi
 
 if [[ -L $config_path ]]; then fail "refusing symlinked config: $config_path"; fi
 install -d -m 755 /usr/local/bin
@@ -110,7 +134,10 @@ WantedBy=multi-user.target
 UNIT
 fi
 systemctl daemon-reload
-if [[ -r /dev/tty ]]; then
+if [[ -n $enroll_panel ]]; then
+  systemctl enable arinode.service
+  systemctl restart arinode.service
+elif [[ -r /dev/tty ]]; then
   /usr/local/bin/anctl bash </dev/tty
 else
   if [[ -z ${ARINODE_INSTALL_MODE:-} && -f $config_path ]]; then

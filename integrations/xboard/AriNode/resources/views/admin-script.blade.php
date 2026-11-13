@@ -143,7 +143,7 @@
         $('deployment-title').textContent = server.name + ' · 一键部署'; $('command-status').textContent = '正在生成部署命令…';
         if (!$('deployment').open) $('deployment').showModal();
         try {
-            const response = await api('command', {id: server.id, core: $('deploy-core').value, language: $('deploy-language').value});
+            const response = await api('command', {id: server.id, core: $('deploy-core').value, multi_node: $('deploy-multi-node').checked, multi_panel: $('deploy-multi-panel').checked});
             if (request !== commandRequest || !$('deployment').open) return;
             $('deploy-command').value = response.data.command; $('copy-command').disabled = false;
             $('command-status').textContent = '命令已就绪';
@@ -212,7 +212,6 @@
     });
     $('server-form').addEventListener('submit', async event => {
         event.preventDefault(); if (saving) return;
-        if (!selected.size) { errorAt('server-error', '请至少选择一个节点。'); return; }
         busy(true); errorAt('server-error');
         try {
             const name = $('server-name').value, active = $('server-active').checked;
@@ -239,7 +238,7 @@
     $('node-search').addEventListener('input', renderNodes); $('directory-search').addEventListener('input', renderDirectory);
     $('search-form').addEventListener('submit', event => { event.preventDefault(); page = 1; loadServers().catch(e => notice(e.message, true)); });
     for (const [id, step] of [['previous', -1], ['next', 1]]) $(id).addEventListener('click', () => { page += step; loadServers().catch(e => notice(e.message, true)); });
-    for (const id of ['deploy-core', 'deploy-language']) $(id).addEventListener('change', showCommand);
+    for (const id of ['deploy-core', 'deploy-multi-node', 'deploy-multi-panel']) $(id).addEventListener('change', showCommand);
     for (const name of ['servers', 'nodes']) {
         $('tab-' + name).addEventListener('click', () => tab(name));
         $('tab-' + name).addEventListener('keydown', event => {

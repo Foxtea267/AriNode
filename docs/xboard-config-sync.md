@@ -23,6 +23,8 @@ XBoard 保存节点
 
 成功应用后文件位于 `/etc/arinode/panel-config/<面板+机器+节点摘要>.json`，内容是插件下发的 native panel JSON，**不是可直接传给内核的配置**。目录 700、文件 600，包含 TLS 私钥时也按相同权限保护，不记录配置正文或机器密钥。相同有效配置不重写、不改变 mtime、不重载。不同节点/面板各有文件，不互相覆盖。
 
+通过 0.7.0 插件注册码部署的机器，默认将节点配置和证书分别保存到 `/etc/arinode/managed-panels/<绑定ID>/nodes` 和 `certs`。首次部署允许零节点，注册后由原生机器接口发现后续绑定。使用 `anctl panel list` 查看绑定 ID。
+
 本地 `/etc/arinode/config.json` 保留为启动配置，管理面板地址、凭据、本地内核参数与 Komari。远程节点文件不会覆盖它；也不会改变本地 `OutboundConfigPath`、`RouteConfigPath`、`OriginalPath` 等兼容选项。节点 Options 可设置 `PanelConfigPath`，供容器或非 root 用户指定可写的持久化目录。
 
 插件文件写入失败时节点仍保持运行，日志明确提示保存失败，后续同步重试。非法路由、证书或内核配置会保留上一份可用节点和快照，不把失败版本标记为已生效。用户撤权仍优先处理；用户接口临时失败不会再阻断配置下载，但撤权应用失败时必须先重试撤权，防止恢复旧凭据。
