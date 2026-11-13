@@ -1,5 +1,9 @@
 # AriNode
 
+## UDP user rate limits
+
+The default `sing` core now applies user `speed_limit` to normal UDP forwarding. TCP, UDP, both directions and concurrent sessions for the same node/user share the existing bucket, preserving Mbps units, device limits, billing and revocation. No extra outbound or node configuration is needed. Regression tests cover real Mieru TCP/UDP transports and VLESS, SS, HY2, TUIC and AnyTLS UDP throttling. The standalone `hysteria2` core and Xray's `DispatchLink` have separate existing gaps; see [implementation, tests and scope](docs/udp-rate-limit.md).
+
 ## Dynamic SOCKS5 Outbound Manager (DSOM)
 
 DSOM adds authenticated SOCKS5 exit-IP probing, IPv4/IPv6 consensus, history, optional ASN/country metadata, Gateway/Direct/Auto modes, fallback gateways, health thresholds and cooldown. It reuses existing Xray/sing-box policies through a private loopback SOCKS relay; upstream changes preserve native outbounds and existing connections. Configure top-level `DynamicOutbounds` locally and reference its tag from XBoard routes, without changing XBoard source. `anctl dsom status` shows state; `anctl dsom diagnose --host HOST --port PORT [--icmp]` diagnoses one explicit gateway.

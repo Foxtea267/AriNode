@@ -271,6 +271,7 @@ func TestMieruAuthenticatedForwarding(t *testing.T) {
 				defer udpStream.Close()
 				udpStream.SetDeadline(time.Now().Add(5 * time.Second))
 				packet := apicommon.NewUDPAssociateWrapper(apicommon.NewPacketOverStreamTunnel(udpStream))
+				udpUpBefore, udpDownBefore := server.GetUserTraffic(tag, uuid, false)
 				if _, err := packet.WriteTo(payload, udpEcho.LocalAddr()); err != nil {
 					t.Fatal(err)
 				}
@@ -281,6 +282,58 @@ func TestMieruAuthenticatedForwarding(t *testing.T) {
 				}
 				if string(b[:n]) != string(payload) {
 					t.Fatal("incorrect UDP response")
+				}
+				mieruWaitTrafficTotals(t, server, tag, uuid, udpUpBefore+int64(len(payload)), udpDownBefore+int64(len(payload)))
+				if speedLimit > 0 {
+					// A UDP transport carrying a TCP target above is not a UDP
+					// datagram limiter check. Start a separate real UDP association
+					// after installing the user's drained shared test bucket.
+					func() {
+						testBucket := ratelimit.NewBucketWithRate(512, 128)
+						testBucket.TakeAvailable(testBucket.Capacity())
+						nodeLimiter.SpeedLimiter.Store(userTag, testBucket)
+						defer nodeLimiter.SpeedLimiter.Store(userTag, originalBucket)
+						dialStarted := time.Now()
+						limitedUDPStream, err := c.DialContext(ctx, &net.UDPAddr{IP: net.IPv4zero})
+						if err != nil {
+							t.Fatalf("low-rate Mieru UDP association handshake after %s: %v", time.Since(dialStarted), err)
+						}
+						defer limitedUDPStream.Close()
+						if elapsed := time.Since(dialStarted); elapsed >= 5*time.Second {
+							t.Fatalf("low-rate Mieru UDP association reply took %s, want less than 5s", elapsed)
+						}
+						limitedUDPStream.SetDeadline(time.Now().Add(5 * time.Second))
+						limitedPacket := apicommon.NewUDPAssociateWrapper(apicommon.NewPacketOverStreamTunnel(limitedUDPStream))
+						limitedPayload := bytes.Repeat([]byte("limited payload/"), 8) // 128-byte UDP payload each way.
+						upBefore, downBefore := server.GetUserTraffic(tag, uuid, false)
+						// Discard refill accumulated during the association handshake;
+						// both payload directions must now reserve the same bucket.
+						testBucket.TakeAvailable(testBucket.Capacity())
+						transferStarted := time.Now()
+						if _, err := limitedPacket.WriteTo(limitedPayload, udpEcho.LocalAddr()); err != nil {
+							t.Fatal(err)
+						}
+						response := make([]byte, 2048)
+						n, _, err := limitedPacket.ReadFrom(response)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !bytes.Equal(response[:n], limitedPayload) {
+							t.Fatal("incorrect low-rate UDP response")
+						}
+						// sing records the copy counters after WritePacket returns;
+						// receipt can precede its limiter wait and accounting. Require
+						// a complete nonzero payload increment in both directions.
+						mieruWaitTrafficTotals(t, server, tag, uuid, upBefore+int64(len(limitedPayload)), downBefore+int64(len(limitedPayload)))
+						if elapsed := time.Since(transferStarted); elapsed < 375*time.Millisecond {
+							t.Fatalf("real Mieru UDP round trip bypassed the shared 512 B/s bucket: %d bytes each way in %s", len(limitedPayload), elapsed)
+						} else {
+							t.Logf("low-rate Mieru UDP round trip and bidirectional accounting completed in %s (%d bytes each way)", elapsed, len(limitedPayload))
+						}
+						if stored, ok := nodeLimiter.SpeedLimiter.Load(userTag); !ok || stored != testBucket {
+							t.Fatal("low-rate Mieru UDP association replaced the user's shared test bucket")
+						}
+					}()
 				}
 				healthy := mieruTestClient(t, port, transport, healthyUUID, info.Mieru.TrafficPattern)
 				healthyConn, err := healthy.DialContext(ctx, echo.Addr())
@@ -354,17 +407,22 @@ func TestMieruAuthenticatedForwarding(t *testing.T) {
 // both directions to include every application byte within a bounded interval.
 func mieruWaitTraffic(t *testing.T, server *Sing, tag, uuid string, minimum int64) {
 	t.Helper()
+	mieruWaitTrafficTotals(t, server, tag, uuid, minimum, minimum)
+}
+
+func mieruWaitTrafficTotals(t *testing.T, server *Sing, tag, uuid string, minimumUp, minimumDown int64) {
+	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	initialUp, initialDown := server.GetUserTraffic(tag, uuid, false)
 	up, down := initialUp, initialDown
-	for up < minimum || down < minimum {
+	for up < minimumUp || down < minimumDown {
 		if time.Now().After(deadline) {
-			t.Fatalf("missing cumulative traffic: up=%d down=%d want each >=%d (initial up=%d down=%d)", up, down, minimum, initialUp, initialDown)
+			t.Fatalf("missing cumulative traffic: up=%d down=%d want up>=%d down>=%d (initial up=%d down=%d)", up, down, minimumUp, minimumDown, initialUp, initialDown)
 		}
 		time.Sleep(5 * time.Millisecond)
 		up, down = server.GetUserTraffic(tag, uuid, false)
 	}
-	if initialUp < minimum || initialDown < minimum {
+	if initialUp < minimumUp || initialDown < minimumDown {
 		t.Logf("accounting became visible: initial up=%d down=%d; final up=%d down=%d", initialUp, initialDown, up, down)
 	}
 }

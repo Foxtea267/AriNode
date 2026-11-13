@@ -1,5 +1,9 @@
 # AriNode
 
+## UDP 用户限速
+
+默认 `sing` 内核的普通 UDP 转发已补齐用户 `speed_limit`：同一节点用户的 TCP、UDP、上下行及并发连接共用现有桶，保留 Mbps 单位、设备限制、计费与撤销行为。无需增加出站或修改节点配置。包含 Mieru TCP/UDP 底层传输及 VLESS、SS、HY2、TUIC、AnyTLS 的真实限速回归。独立 `hysteria2` 内核和 Xray `DispatchLink` 另有限速缺口，详见[实现、测试和范围限制](docs/udp-rate-limit.md)。
+
 ## 动态 SOCKS5 出站管理（DSOM）
 
 支持经 SOCKS5 多源探测 IPv4/IPv6 出口、IP 历史、可选国家/ASN 信息、Gateway/Direct/Auto 模式、备用网关、失败/成功阈值和切换冷却。使用独立模块和带随机认证的回环 SOCKS 中继，复用 Xray/sing-box 出站及路由；切换不重建 native outbound，已有连接继续使用旧链路。本地配置顶层 `DynamicOutbounds`，XBoard 原有路由引用 tag，无需修改面板源码。

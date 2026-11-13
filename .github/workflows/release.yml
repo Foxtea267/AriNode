@@ -23,8 +23,10 @@ jobs:
           cache: true
       - name: Test
         run: GOEXPERIMENT=jsonv2 go test -p 2 -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' ./...
-      - name: Check managers, device tracking and config watcher concurrency
-        run: GOEXPERIMENT=jsonv2 go test -race -p 2 ./dsom ./conf ./limiter
+      - name: Check managers, device tracking, rate limiting and config watcher concurrency
+        run: |
+          GOEXPERIMENT=jsonv2 go test -race -p 2 ./dsom ./conf ./limiter ./common/rate
+          GOEXPERIMENT=jsonv2 go test -race -p 2 ./core/sing -run '^(TestHookTCPAndPacketSessionsShareUserRateAndAccounting|TestHookConnectionsKeepSharedUserRateBucket|TestHookReleasesPacketSessionFromDeviceReports)$' -count=1 -timeout=120s
 
       - name: Validate installer shell syntax
         run: |

@@ -3,6 +3,7 @@
 package sing
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -12,9 +13,11 @@ import (
 	"time"
 
 	"github.com/Foxtea267/AriNode/api/panel"
+	"github.com/Foxtea267/AriNode/common/format"
 	"github.com/Foxtea267/AriNode/conf"
 	"github.com/Foxtea267/AriNode/core"
 	"github.com/Foxtea267/AriNode/limiter"
+	"github.com/juju/ratelimit"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
@@ -49,16 +52,22 @@ func TestAllSingProtocolsAuthenticatedForwarding(t *testing.T) {
 	cases := []struct {
 		name, protocol, network, cipher string
 		udp                             bool
+		speedLimit                      int
 	}{
-		{"vmess-tcp", "vmess", "tcp", "", true}, {"vmess-ws", "vmess", "ws", "", false},
-		{"vless-tcp", "vless", "tcp", "", true}, {"vless-ws", "vless", "ws", "", false}, {"vless-grpc", "vless", "grpc", "", false}, {"vless-httpupgrade", "vless", "httpupgrade", "", false},
-		{"vless-h2", "vless", "h2", "", false},
-		{"trojan-tls", "trojan", "tcp", "", true}, {"trojan-ws", "trojan", "ws", "", false},
-		{"trojan-grpc", "trojan", "grpc", "", false}, {"trojan-h2", "trojan", "h2", "", false},
-		{"trojan-httpupgrade", "trojan", "httpupgrade", "", true},
-		{"ss-classic", "shadowsocks", "", "aes-128-gcm", true}, {"ss-2022-128", "shadowsocks", "", "2022-blake3-aes-128-gcm", true}, {"ss-2022-256", "shadowsocks", "", "2022-blake3-aes-256-gcm", true},
-		{"ss-aes256", "shadowsocks", "", "aes-256-gcm", true}, {"ss-chacha20", "shadowsocks", "", "chacha20-ietf-poly1305", true},
-		{"hy1", "hysteria", "", "", true}, {"hy2", "hysteria2", "", "", true}, {"tuic", "tuic", "", "", true}, {"anytls", "anytls", "", "", true},
+		{"vmess-tcp", "vmess", "tcp", "", true, 0}, {"vmess-ws", "vmess", "ws", "", false, 0},
+		{"vless-tcp", "vless", "tcp", "", true, 0}, {"vless-ws", "vless", "ws", "", false, 0}, {"vless-grpc", "vless", "grpc", "", false, 0}, {"vless-httpupgrade", "vless", "httpupgrade", "", false, 0},
+		{"vless-h2", "vless", "h2", "", false, 0},
+		{"trojan-tls", "trojan", "tcp", "", true, 0}, {"trojan-ws", "trojan", "ws", "", false, 0},
+		{"trojan-grpc", "trojan", "grpc", "", false, 0}, {"trojan-h2", "trojan", "h2", "", false, 0},
+		{"trojan-httpupgrade", "trojan", "httpupgrade", "", true, 0},
+		{"ss-classic", "shadowsocks", "", "aes-128-gcm", true, 0}, {"ss-2022-128", "shadowsocks", "", "2022-blake3-aes-128-gcm", true, 0}, {"ss-2022-256", "shadowsocks", "", "2022-blake3-aes-256-gcm", true, 0},
+		{"ss-aes256", "shadowsocks", "", "aes-256-gcm", true, 0}, {"ss-chacha20", "shadowsocks", "", "chacha20-ietf-poly1305", true, 0},
+		{"hy1", "hysteria", "", "", true, 0}, {"hy2", "hysteria2", "", "", true, 0}, {"tuic", "tuic", "", "", true, 0}, {"anytls", "anytls", "", "", true, 0},
+		{"vless-udp-limited", "vless", "tcp", "", true, 300},
+		{"ss-udp-limited", "shadowsocks", "", "aes-128-gcm", true, 300},
+		{"hy2-udp-limited", "hysteria2", "", "", true, 300},
+		{"tuic-udp-limited", "tuic", "", "", true, 300},
+		{"anytls-udp-limited", "anytls", "", "", true, 300},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -146,8 +155,8 @@ func TestAllSingProtocolsAuthenticatedForwarding(t *testing.T) {
 			}
 			defer server.Close()
 			limiter.Init()
-			users := []panel.UserInfo{{Id: 1, Uuid: uuid}}
-			limiter.AddLimiter(tc.name, &conf.LimitConfig{}, users, map[int]int{})
+			users := []panel.UserInfo{{Id: 1, Uuid: uuid, SpeedLimit: tc.speedLimit}}
+			nodeLimiter := limiter.AddLimiter(tc.name, &conf.LimitConfig{}, users, map[int]int{})
 			defer limiter.DeleteLimiter(tc.name)
 			if err := server.AddNode(tc.name, info, &conf.Options{ListenIP: "127.0.0.1", SingOptions: conf.NewSingOptions(), CertConfig: conf.NewCertConfig()}); err != nil {
 				t.Fatal(err)
@@ -156,7 +165,7 @@ func TestAllSingProtocolsAuthenticatedForwarding(t *testing.T) {
 				t.Fatal(err)
 			}
 			client := protocolClient(t, out)
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			stop := context.AfterFunc(ctx, func() { client.Close() })
 			defer stop()
@@ -191,18 +200,11 @@ func TestAllSingProtocolsAuthenticatedForwarding(t *testing.T) {
 			if string(response) != string(payload) {
 				t.Fatal("TCP proxy response mismatch")
 			}
-			trafficDeadline := time.Now().Add(200 * time.Millisecond)
-			for {
-				up, down := server.GetUserTraffic(tc.name, uuid, false)
-				if up > 0 && down > 0 {
-					break
-				}
-				if time.Now().After(trafficDeadline) {
-					t.Fatalf("missing user traffic: up=%d down=%d", up, down)
-				}
-				time.Sleep(time.Millisecond)
-			}
-			if tc.protocol != "hysteria" {
+			mieruWaitTraffic(t, server, tc.name, uuid, int64(len(payload)))
+			// The unlimited cases retain the panel-outbound coverage. Keep the
+			// limited cases' traffic isolated to this client so their UDP deltas
+			// cannot be satisfied by deferred accounting from another client.
+			if tc.protocol != "hysteria" && tc.speedLimit == 0 {
 				verifyPanelOutbound(t, server, tc.name+"-panel", tc.protocol, uuid, out)
 			}
 			if !tc.udp {
@@ -220,13 +222,37 @@ func TestAllSingProtocolsAuthenticatedForwarding(t *testing.T) {
 					udpEcho.WriteTo(b[:n], addr)
 				}
 			}()
+			var testBucket *ratelimit.Bucket
+			userTag := format.UserTag(tc.name, uuid)
+			if tc.speedLimit > 0 {
+				// Keep the initial TCP exchange on the configured 300 Mbps
+				// bucket. Only a new UDP association uses the drained low-rate
+				// fixture, making a datagram-copy bypass observable locally.
+				originalBucket, rejected := nodeLimiter.CheckLimit(userTag, "127.0.0.1", false, false)
+				if rejected || originalBucket == nil || originalBucket.Rate() != 37_500_000 {
+					t.Fatalf("speed_limit=300: bucket=%v rejected=%v, want 37500000 B/s", originalBucket, rejected)
+				}
+				testBucket = ratelimit.NewBucketWithRate(512, 128)
+				testBucket.TakeAvailable(testBucket.Capacity())
+				nodeLimiter.SpeedLimiter.Store(userTag, testBucket)
+				defer nodeLimiter.SpeedLimiter.Store(userTag, originalBucket)
+			}
 			packet, err := client.Outbound().Default().ListenPacket(ctx, M.ParseSocksaddr(udpEcho.LocalAddr().String()))
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer packet.Close()
 			packet.SetDeadline(time.Now().Add(5 * time.Second))
-			if _, err := packet.WriteTo(payload, udpEcho.LocalAddr()); err != nil {
+			udpPayload := payload
+			if testBucket != nil {
+				udpPayload = bytes.Repeat([]byte("limited payload/"), 8) // 128 bytes in each direction.
+				// Discard refill accrued while ListenPacket negotiated this
+				// protocol's transport. The payload must reserve tokens now.
+				testBucket.TakeAvailable(testBucket.Capacity())
+			}
+			upBefore, downBefore := server.GetUserTraffic(tc.name, uuid, false)
+			transferStarted := time.Now()
+			if _, err := packet.WriteTo(udpPayload, udpEcho.LocalAddr()); err != nil {
 				t.Fatal(err)
 			}
 			b := make([]byte, 2048)
@@ -234,8 +260,22 @@ func TestAllSingProtocolsAuthenticatedForwarding(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if string(b[:n]) != string(payload) {
+			if !bytes.Equal(b[:n], udpPayload) {
 				t.Fatal("UDP proxy response mismatch")
+			}
+			// CopyPacket records counters after its destination write returns;
+			// require actual new payload in both directions before checking
+			// elapsed time so receipt cannot conceal a pending limiter wait.
+			mieruWaitTrafficTotals(t, server, tc.name, uuid, upBefore+int64(len(udpPayload)), downBefore+int64(len(udpPayload)))
+			if testBucket != nil {
+				if elapsed := time.Since(transferStarted); elapsed < 375*time.Millisecond {
+					t.Fatalf("%s UDP round trip bypassed the shared 512 B/s bucket: %d bytes each way in %s", tc.protocol, len(udpPayload), elapsed)
+				} else {
+					t.Logf("%s UDP round trip and bidirectional accounting completed in %s (%d bytes each way)", tc.protocol, elapsed, len(udpPayload))
+				}
+				if stored, ok := nodeLimiter.SpeedLimiter.Load(userTag); !ok || stored != testBucket {
+					t.Fatal("UDP association replaced the user's shared test bucket")
+				}
 			}
 		})
 	}
