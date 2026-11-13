@@ -157,6 +157,7 @@ namespace {
     $backendRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/backend-update');
     check(count($backendRoutes) === 2, 'Backend update needs separate GET and POST routes');
     foreach ($backendRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected backend update route'); }
+    check(in_array('admin', $routes['/api/v1/arinode/admin/backend-update/machines']->gatherMiddleware(), true), 'Backend update inventory is not admin authenticated');
     $settingsRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/settings');
     check(count($settingsRoutes) === 2, 'API settings need GET and POST routes');
     foreach ($settingsRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected API settings route'); }
@@ -324,6 +325,21 @@ namespace {
     };
     $container->instance('cache', $backendCache);
     $updates = new BackendUpdateController();
+    $inventory = data($updates->machines(req(['current' => 1, 'pageSize' => 2])));
+    check($inventory['total'] === 3 && count($inventory['data']) === 2 && $inventory['data'][0]['id'] === $other->id,
+        'Backend update inventory did not paginate every server machine');
+    check(isset($inventory['data'][0]['is_active']) && !isset($inventory['data'][0]['token']) && !isset($inventory['data'][0]['install_command']),
+        'Backend update inventory exposed credentials or omitted the active state');
+    check($inventory['data'][1]['id'] === $id && !$inventory['data'][1]['is_active'], 'Backend update inventory omitted disabled machines');
+    check(array_keys($inventory['data'][0]) === ['id', 'name', 'is_active'], 'Backend update inventory leaked additional machine fields');
+    check(str_contains($updates->machines(req())->headers->get('Cache-Control'), 'no-store'), 'Backend update inventory can be cached');
+    $inventoryLastPage = data($updates->machines(req(['current' => 2, 'pageSize' => 2])));
+    check(count($inventoryLastPage['data']) === 1 && $inventoryLastPage['data'][0]['id'] === $empty,
+        'Backend update inventory omitted a later page');
+    rejects(fn() => $updates->machines(req(['pageSize' => 101])), ValidationException::class);
+    $updates->disabled = true;
+    rejects(fn() => $updates->machines(req()), HttpException::class);
+    $updates->disabled = false;
     $emptyMachine = ServerMachine::findOrFail($empty);
     $agentID = str_repeat('a', 32);
     $agentRequest = function (ServerMachine $machine, string $action, array $payload = []) use ($agentID): Request {

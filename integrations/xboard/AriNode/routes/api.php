@@ -19,6 +19,7 @@ Route::middleware('admin')->group(function () {
     Route::post('/api/v1/arinode/admin/update', [UpdateController::class, 'install']);
     Route::get('/api/v1/arinode/admin/backend-update', [BackendUpdateController::class, 'status']);
     Route::post('/api/v1/arinode/admin/backend-update', [BackendUpdateController::class, 'queue']);
+    Route::get('/api/v1/arinode/admin/backend-update/machines', [BackendUpdateController::class, 'machines']);
     Route::get('/api/v1/arinode/admin/entry', [AdminController::class, 'entry']);
     Route::get('/api/v1/arinode/admin/servers', [AdminController::class, 'servers']);
     Route::get('/api/v1/arinode/admin/nodes', [AdminController::class, 'nodes']);

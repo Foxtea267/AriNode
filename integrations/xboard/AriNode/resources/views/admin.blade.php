@@ -11,7 +11,7 @@
 </head>
 <body>
 <header class="topbar">
-    <div class="brand">AriNode <span class="version">0.9.1</span></div>
+    <div class="brand">AriNode <span class="version">0.9.2</span></div>
     <div class="topbar-tools"><button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题"></button></div>
 </header>
 <main class="shell">
@@ -30,8 +30,9 @@
         </section>
         <nav class="tabs" aria-label="管理视图" role="tablist"><button id="tab-servers" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="servers-panel">服务器 <span id="total" class="tab-count">0</span></button><button id="tab-nodes" class="tab" type="button" role="tab" aria-selected="false" aria-controls="nodes-panel" tabindex="-1">节点目录 <span id="nodes-total" class="tab-count">0</span></button></nav>
         <section id="servers-panel" class="panel" role="tabpanel" aria-labelledby="tab-servers">
-            <form id="search-form" class="toolbar"><input id="server-search" type="search" placeholder="搜索服务器名称" aria-label="搜索服务器名称"><button class="button subtle">搜索</button><span class="toolbar-note">选择服务器以编辑绑定或获取部署命令</span></form>
-            <div class="table-wrap"><table><thead><tr><th>服务器</th><th>状态</th><th>绑定节点</th><th>最后上报</th><th class="actions-heading">操作</th></tr></thead><tbody id="server-list"></tbody></table></div>
+            <form id="search-form" class="toolbar"><input id="server-search" type="search" placeholder="搜索服务器名称" aria-label="搜索服务器名称"><button class="button subtle">搜索</button><span class="toolbar-note">可跨页选择服务器进行批量操作</span></form>
+            <div class="server-bulk-toolbar"><label class="page-select"><input id="select-server-page" type="checkbox"><span>选择本页</span></label><span id="selected-server-count" class="selection-count">已选 0 台</span><div class="bulk-actions"><button id="clear-server-selection" class="button subtle" type="button" disabled>清空选择</button><button id="bulk-update-selected" class="button subtle" type="button" disabled>批量更新后端</button><button id="bulk-update-all" class="button" type="button">全部更新后端</button></div></div>
+            <div class="table-wrap"><table><thead><tr><th class="select-column" aria-label="选择"><span class="sr-only">选择</span></th><th>服务器</th><th>状态</th><th>绑定节点</th><th>最后上报</th><th class="actions-heading">操作</th></tr></thead><tbody id="server-list"></tbody></table></div>
             <div class="panel-footer"><span id="list-summary">共 0 台服务器</span><div class="pager"><button id="previous" class="button subtle" type="button">上一页</button><span id="page-label">1 / 1</span><button id="next" class="button subtle" type="button">下一页</button></div></div>
         </section>
         <section id="nodes-panel" class="panel" role="tabpanel" aria-labelledby="tab-nodes" hidden>
@@ -100,6 +101,16 @@
         <div class="deployment-note">节点收到任务后会安装最新正式版。更新会重启这台 VPS 上的 AriNode 服务，短暂中断该进程下所有面板的连接。</div>
     </div>
     <div class="dialog-footer"><button id="send-backend-update" class="button" type="button" disabled>更新到最新正式版</button></div>
+</dialog>
+<dialog id="bulk-update" class="bulk-update-dialog" aria-labelledby="bulk-update-title">
+    <div class="dialog-heading"><div><h2 id="bulk-update-title">批量更新后端</h2><p id="bulk-update-target"></p></div><button id="close-bulk-update" class="icon-button" type="button" aria-label="关闭批量更新">×</button></div>
+    <div class="dialog-body">
+        <p id="bulk-update-status" class="field-help" role="status" aria-live="polite">正在读取服务器状态…</p>
+        <progress id="bulk-update-progress" class="bulk-progress" max="1" value="0"></progress>
+        <div class="bulk-results-wrap"><table class="bulk-results"><thead><tr><th>服务器</th><th>当前版本</th><th>结果</th></tr></thead><tbody id="bulk-update-results"></tbody></table></div>
+        <div class="deployment-note">仅在线且未被多个服务器共用的机器可以下发更新。每台机器单独排队，失败时不会中断其他机器。后端更新会重启该 VPS 上的 AriNode。</div>
+    </div>
+    <div class="dialog-footer"><button id="dismiss-bulk-update" class="button subtle" type="button">关闭</button><button id="start-bulk-update" class="button" type="button" disabled>下发更新任务</button></div>
 </dialog>
 <script>@include('AriNode::admin-theme')</script>
 <script>@include('AriNode::admin-script')</script>

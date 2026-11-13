@@ -2,7 +2,7 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.9.1** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.9.2** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
 
 ## 配置自动下发
 
@@ -20,9 +20,13 @@
 
 ## 手动更新 VPS 后端
 
-在 AriNode 插件的服务器列表中，点击目标服务器的 **更新后端**，查看当前版本后点击 **更新到最新正式版**。服务器领取任务后校验并安装 GitHub 正式版。页面显示待领取、更新中、完成或失败。已是最新版本时无需重启。
+单台更新：在 AriNode 插件的服务器列表中，点击目标服务器的 **更新后端**，查看当前版本后点击 **更新到最新正式版**。
 
-支持官方脚本安装的 Linux systemd 服务和通过 HTTPS 注册的机器模式（也支持暂未绑定节点的服务器）。面板使用 Redis 保存任务，每台 VPS 应使用独立的机器记录。旧版后端需先在 VPS 执行一次 `sudo anctl upgrade`。后端需要能够访问 GitHub Releases。
+批量更新：跨一个或多个页面勾选服务器，点击 **批量更新后端**。确认预览中的服务器范围后，点击 **下发更新任务**。点击 **全部更新后端** 会获取全部页面的机器清单，忽略当前搜索条件，并在预览中显示停用机器及其跳过状态。浏览器逐台查询状态并排队，最多同时处理 3 台，批量选择跨页面保留。
+
+批量操作复用已有的单机状态查询及排队 API，不会创建一次性重启所有机器的后端批处理任务。停用机器、离线机器、同一机器有多个 agent 的冲突机器，以及已有 `pending` 或 `running` 任务的机器会显示为跳过并说明原因。其余机器分别创建更新任务；单台请求失败不会阻止队列继续处理其他机器。每台机器的待领取、更新中、完成或失败状态都单独展示，已经是最新版本时无需重启。
+
+支持官方脚本安装的 Linux systemd 服务和通过 HTTPS 注册的机器模式（也支持暂未绑定节点的服务器）。全部更新获取跨所有页面的机器清单，不受当前名称搜索条件影响，并将停用机器包括在预览中以显示跳过原因。更新任务分别使用每台机器的 Redis 状态与锁，每台 VPS 应使用独立的机器记录。旧版后端需先在 VPS 执行一次 `sudo anctl upgrade`。后端需要能够访问 GitHub Releases。
 
 安装新版会短暂重启目标 VPS 上的 AriNode，影响该进程上的所有面板绑定。若新版未通过本机健康检查，更新器会尝试恢复旧版。失败详情可在 VPS 上运行 `sudo journalctl -u arinode-panel-upgrade.service -n 80 --no-pager` 查看。手动更新与 `anctl upgrade auto` 的设置独立。
 

@@ -26,6 +26,28 @@ class BackendUpdateController extends PluginController
         return $this->admin($request, true);
     }
 
+    public function machines(Request $request): JsonResponse
+    {
+        $this->enabled();
+        $params = $request->validate([
+            'current' => 'sometimes|integer|min:1',
+            'pageSize' => 'sometimes|integer|min:1|max:100',
+        ]);
+        // Enumerate all pages without minting deployment credentials or loading
+        // node bindings. Search on the normal table does not restrict "update all".
+        $query = ServerMachine::query()->orderBy('id');
+        $total = (clone $query)->count();
+        $size = (int) ($params['pageSize'] ?? 100);
+        $data = $query->skip(((int) ($params['current'] ?? 1) - 1) * $size)->take($size)
+            ->get(['id', 'name', 'is_active'])->map(static fn(ServerMachine $machine): array => [
+            'id' => (int) $machine->id,
+            'name' => (string) $machine->name,
+            'is_active' => (bool) $machine->is_active,
+        ])->values();
+        return response()->json(['data' => $data, 'total' => $total])
+            ->header('Cache-Control', 'no-store, private');
+    }
+
     private function admin(Request $request, bool $queue): JsonResponse
     {
         $this->enabled();
@@ -47,7 +69,7 @@ class BackendUpdateController extends PluginController
             if ($publicJob !== null) {
                 unset($publicJob['agent']);
             }
-            return [$state, ['ready' => (bool) $ready, 'conflict' => count($agents) > 1,
+            return [$state, ['ready' => (bool) $ready, 'active' => (bool) $machine->is_active, 'conflict' => count($agents) > 1,
                 'version' => $agents[$agent]['version'] ?? null, 'job' => $job ? $publicJob : null]];
         });
     }

@@ -5,8 +5,10 @@
     let commandRequest = 0, saving = false;
     let updateInfo = null, checkingUpdate = false, installingUpdate = false, updateRequest = 0;
     let backendServer = null, backendRequest = 0, backendTimer = 0, queuingBackend = false;
+    let bulkUpdating = false, bulkRequest = 0, bulkTimer = 0, bulkItems = [];
     let settingsRequest = 0, savingSettings = false;
     const selected = new Set();
+    const selectedServers = new Map();
     function notice(message, error = false) {
         $('notice').textContent = message; $('notice').hidden = !message;
         $('notice').classList.toggle('error', error);
@@ -18,17 +20,24 @@
             return record && (!record.expire || record.expire > Date.now()) && typeof record.value === 'string' ? record.value : '';
         } catch (_) { return ''; }
     }
-    async function api(path, body) {
-        const response = await fetch('/api/v1/arinode/admin/' + path, {method: body ? 'POST' : 'GET', credentials: 'omit', cache: 'no-store', headers: {Authorization: token, Accept: 'application/json', ...(body ? {'Content-Type': 'application/json'} : {})}, ...(body ? {body: JSON.stringify(body)} : {})});
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            if (response.status === 401 || response.status === 403) {
-                $('auth').hidden = false; $('workspace').hidden = true;
-                $('server-dialog').close(); $('deployment').close(); $('plugin-update').close(); $('backend-update').close(); $('settings-dialog').close(); invalidateCommand();
+    async function api(path, body, timeout = 0) {
+        const controller = new AbortController();
+        const timer = timeout ? setTimeout(() => controller.abort(), timeout) : 0;
+        try {
+            const response = await fetch('/api/v1/arinode/admin/' + path, {method: body ? 'POST' : 'GET', credentials: 'omit', cache: 'no-store', signal: controller.signal, headers: {Authorization: token, Accept: 'application/json', ...(body ? {'Content-Type': 'application/json'} : {})}, ...(body ? {body: JSON.stringify(body)} : {})});
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    $('auth').hidden = false; $('workspace').hidden = true;
+                    $('server-dialog').close(); $('deployment').close(); $('plugin-update').close(); $('backend-update').close(); $('settings-dialog').close(); $('bulk-update').close(); invalidateBulk(); invalidateCommand();
+                }
+                throw new Error(Object.values(data.errors || {}).flat().join('；') || data.message || '请求失败（' + response.status + '）');
             }
-            throw new Error(Object.values(data.errors || {}).flat().join('；') || data.message || '请求失败（' + response.status + '）');
-        }
-        return data;
+            return data;
+        } catch (e) {
+            if (e.name === 'AbortError') throw new Error('请求超时，请重新读取状态；已下发的任务不会自动重试。');
+            throw e;
+        } finally { clearTimeout(timer); }
     }
     function text(tag, value, className) {
         const el = document.createElement(tag); el.textContent = value;
@@ -58,6 +67,22 @@
         $('stat-nodes').textContent = nodes.filter(n => n.enabled && n.supported).length;
         const latest = Math.max(0, ...rows.map(row => Number(row.last_seen_at) || 0));
         $('stat-report').textContent = latest ? date(latest) : '尚未上报';
+    }
+    function updateBulkControls() {
+        const pageMachines = rows.filter(server => server.is_active);
+        const selectedPage = pageMachines.filter(server => selectedServers.has(server.id)).length;
+        const selectPage = $('select-server-page');
+        selectPage.checked = pageMachines.length > 0 && selectedPage === pageMachines.length;
+        selectPage.indeterminate = selectedPage > 0 && selectedPage < pageMachines.length;
+        selectPage.disabled = bulkUpdating || pageMachines.length === 0;
+        $('selected-server-count').textContent = '已选 ' + selectedServers.size + ' 台';
+        $('bulk-update-selected').disabled = bulkUpdating || selectedServers.size === 0;
+        $('clear-server-selection').disabled = bulkUpdating || selectedServers.size === 0;
+        $('bulk-update-all').disabled = bulkUpdating;
+        for (const input of $('server-list').querySelectorAll('.server-select')) input.disabled = bulkUpdating || input.dataset.active !== 'true';
+        for (const control of $('search-form').elements) control.disabled = bulkUpdating;
+        $('previous').disabled = bulkUpdating || page <= 1;
+        $('next').disabled = bulkUpdating || page * 20 >= total;
     }
     function renderNodes() {
         const query = $('node-search').value.trim().toLowerCase(), options = $('node-options'); options.replaceChildren();
@@ -96,6 +121,7 @@
     function renderServers() {
         const list = $('server-list'); list.replaceChildren(); const byId = new Map(nodes.map(n => [n.id, n]));
         rows.forEach(server => {
+            if (selectedServers.has(server.id)) selectedServers.set(server.id, server);
             const row = document.createElement('tr'), name = document.createElement('div');
             name.append(text('span', server.name, 'server-name'), text('div', '机器 #' + server.id + (server.notes ? ' · ' + server.notes : ''), 'cell-note'));
             cell(row, '服务器').append(name); cell(row, '状态').append(status(server.is_active));
@@ -104,15 +130,25 @@
             protocols.forEach(protocol => pills.append(text('span', protocol, 'pill')));
             bindings.append(pills, text('div', server.node_ids.length ? server.node_ids.length + ' 个节点 · ' + server.node_ids_text : '尚未绑定节点', 'cell-note'));
             cell(row, '绑定节点').append(bindings); cell(row, '最后上报').textContent = date(server.last_seen_at);
+            const selectCell = cell(row, '选择'); selectCell.classList.add('selection-cell');
+            const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = selectedServers.has(server.id);
+            checkbox.className = 'server-select'; checkbox.dataset.active = String(server.is_active);
+            checkbox.disabled = bulkUpdating || !server.is_active;
+            checkbox.setAttribute('aria-label', '选择 ' + server.name);
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) selectedServers.set(server.id, server); else selectedServers.delete(server.id);
+                updateBulkControls();
+            });
+            selectCell.append(checkbox); row.prepend(selectCell);
             const actions = document.createElement('div'); actions.className = 'actions';
             actions.append(button('编辑绑定', async () => openEditor(server)), button('部署命令', async () => { deploying = server; await showCommand(); }));
             if (server.is_active) actions.append(button('更新后端', async () => openBackendUpdate(server)));
             cell(row, '操作').append(actions); list.append(row);
         });
-        if (!rows.length) emptyRow(list, 5, '还没有匹配的服务器', '点击右上角“添加服务器”开始部署，或调整搜索条件。');
+        if (!rows.length) emptyRow(list, 6, '还没有匹配的服务器', '点击右上角“添加服务器”开始部署，或调整搜索条件。');
         $('total').textContent = total; $('list-summary').textContent = '共 ' + total + ' 台服务器';
         $('page-label').textContent = page + ' / ' + Math.max(1, Math.ceil(total / 20));
-        $('previous').disabled = page <= 1; $('next').disabled = page * 20 >= total; stats();
+        stats(); updateBulkControls();
     }
     function invalidateCommand() {
         commandRequest++; $('deploy-command').value = ''; $('copy-command').disabled = true;
@@ -279,6 +315,155 @@
     $('send-backend-update').addEventListener('click', () => {
         if (!queuingBackend && !$('send-backend-update').disabled) refreshBackendUpdate(true);
     });
+    function invalidateBulk() {
+        bulkRequest++; clearTimeout(bulkTimer); bulkUpdating = false;
+        bulkItems = [];
+        for (const id of ['close-bulk-update', 'dismiss-bulk-update']) $(id).disabled = false;
+        updateBulkControls();
+    }
+    function bulkCurrent(request) { return request === bulkRequest && $('bulk-update').open; }
+    function activeJob(data) { return ['pending', 'running'].includes(data?.job?.state); }
+    function bulkMessage(item) {
+        if (item.error) return item.error;
+        const data = item.data;
+        if (!data) return '正在读取状态…';
+        const job = data.job;
+        if (activeJob(data)) return (item.submitted ? '' : '跳过：已有任务 · ') + (job.state === 'pending' ? '等待节点领取' : '正在更新');
+        if (item.watch && job) {
+            return ({succeeded: '更新成功 · ' + (job.version || data.version || '新版本'), current: '已是最新正式版',
+                failed: '更新失败，请检查 VPS 更新日志', expired: '任务超时，请核对后端版本后重试'})[job.state] || '任务状态未知';
+        }
+        if (data.active === false) return '跳过：服务器已停用';
+        if (data.conflict) return '跳过：多台服务器共用机器记录';
+        return data.ready ? '可下发更新' : '跳过：离线或未上报更新能力';
+    }
+    function renderBulkItem(item) {
+        item.versionCell.textContent = item.data?.version || '—';
+        item.resultCell.textContent = bulkMessage(item);
+        item.resultCell.classList.toggle('form-error', !!item.error || ['failed', 'expired'].includes(item.data?.job?.state));
+    }
+    function mountBulkItems() {
+        const body = $('bulk-update-results'); body.replaceChildren();
+        for (const item of bulkItems) {
+            const row = document.createElement('tr'); row.dataset.machineId = item.id;
+            const name = cell(row, '服务器'); name.append(text('strong', item.name), text('div', '机器 #' + item.id, 'cell-note'));
+            item.versionCell = cell(row, '当前版本'); item.resultCell = cell(row, '结果');
+            body.append(row); renderBulkItem(item);
+        }
+        if (!bulkItems.length) emptyRow(body, 3, '没有可操作的服务器');
+    }
+    // Each machine keeps its existing authenticated queue and Redis lock. Bounded
+    // workers avoid a long HTTP batch and isolate per-machine failures.
+    async function bulkWork(items, request, work) {
+        let index = 0, completed = 0;
+        await Promise.all(Array.from({length: Math.min(3, items.length)}, async () => {
+            while (bulkCurrent(request) && index < items.length) {
+                const item = items[index++];
+                try { await work(item); }
+                catch (e) { if (bulkCurrent(request)) { item.error = e.message; item.eligible = false; } }
+                if (!bulkCurrent(request)) return;
+                renderBulkItem(item); $('bulk-update-progress').value = ++completed;
+            }
+        }));
+    }
+    async function bulkInventory(request) {
+        const machines = new Map();
+        for (let current = 1; bulkCurrent(request); current++) {
+            const response = await api('backend-update/machines?current=' + current + '&pageSize=100', undefined, 20000);
+            if (!bulkCurrent(request)) return [];
+            for (const machine of response.data) machines.set(machine.id, machine);
+            $('bulk-update-status').textContent = '正在读取全部服务器… ' + machines.size + ' / ' + response.total;
+            if (current * 100 >= response.total || !response.data.length) break;
+        }
+        return [...machines.values()];
+    }
+    function bulkSummary() {
+        const sent = bulkItems.filter(item => item.submitted).length;
+        const active = bulkItems.filter(item => activeJob(item.data)).length;
+        const done = bulkItems.filter(item => item.watch && ['succeeded', 'current'].includes(item.data?.job?.state)).length;
+        const errors = bulkItems.filter(item => item.error || item.watch && ['failed', 'expired'].includes(item.data?.job?.state)).length;
+        return '共 ' + bulkItems.length + ' 台 · 本次已下发 ' + sent + ' 台 · 等待/执行 ' + active + ' 台 · 成功/最新 ' + done + ' 台 · 异常 ' + errors + ' 台';
+    }
+    async function pollBulk(request) {
+        if (!bulkCurrent(request)) return;
+        const watching = bulkItems.filter(item => item.watch && (!item.data?.job || activeJob(item.data) || item.error));
+        if (!watching.length) return;
+        $('bulk-update-progress').max = watching.length; $('bulk-update-progress').value = 0;
+        await bulkWork(watching, request, async item => {
+            const response = await api('backend-update?id=' + item.id, undefined, 20000);
+            if (!bulkCurrent(request)) return;
+            item.data = response.data; item.error = '';
+            // A timed-out POST may have queued a job. Observe it, never resend it.
+            if (!item.data.job) { item.watch = false; item.error = '未发现更新任务，请重新预览后确认。'; }
+        });
+        if (!bulkCurrent(request)) return;
+        $('bulk-update-status').textContent = bulkSummary();
+        if (bulkItems.some(item => item.watch && (activeJob(item.data) || item.error))) {
+            bulkTimer = setTimeout(() => pollBulk(request), 5000);
+        }
+    }
+    async function openBulkUpdate(all) {
+        if (bulkUpdating || (!all && !selectedServers.size)) return;
+        invalidateBulk(); const request = bulkRequest;
+        $('bulk-update-title').textContent = all ? '全部更新后端' : '批量更新后端';
+        $('bulk-update-target').textContent = all ? '范围：所有分页的服务器，不受当前搜索条件限制。' : '范围：跨页选中的 ' + selectedServers.size + ' 台服务器。';
+        $('bulk-update-status').textContent = '正在读取服务器状态；确认前不会下发任务。';
+        $('start-bulk-update').disabled = true; $('start-bulk-update').textContent = '下发更新任务';
+        $('bulk-update-progress').value = 0; $('bulk-update-results').replaceChildren();
+        $('bulk-update').showModal();
+        try {
+            const machines = all ? await bulkInventory(request) : [...selectedServers.values()];
+            if (!bulkCurrent(request)) return;
+            bulkItems = machines.map(machine => ({id: machine.id, name: machine.name, eligible: false, submitted: false, watch: false, error: ''}));
+            mountBulkItems(); $('bulk-update-progress').max = Math.max(1, bulkItems.length);
+            await bulkWork(bulkItems, request, async item => {
+                const response = await api('backend-update?id=' + item.id, undefined, 20000);
+                if (!bulkCurrent(request)) return;
+                item.data = response.data;
+                item.eligible = item.data.ready && item.data.active !== false && !item.data.conflict && !activeJob(item.data);
+                item.watch = activeJob(item.data);
+            });
+            if (!bulkCurrent(request)) return;
+            const ready = bulkItems.filter(item => item.eligible).length;
+            $('bulk-update-status').textContent = '已检查 ' + bulkItems.length + ' 台 · 可更新 ' + ready + ' 台 · 跳过/读取失败 ' + (bulkItems.length - ready) + ' 台。确认后开始下发。';
+            $('start-bulk-update').disabled = ready === 0;
+            if (!ready) bulkTimer = setTimeout(() => pollBulk(request), 5000);
+        } catch (e) { if (bulkCurrent(request)) $('bulk-update-status').textContent = '读取失败：' + e.message; }
+    }
+    $('start-bulk-update').addEventListener('click', async () => {
+        if (bulkUpdating || $('start-bulk-update').disabled) return;
+        const request = bulkRequest, candidates = bulkItems.filter(item => item.eligible);
+        clearTimeout(bulkTimer);
+        bulkUpdating = true; updateBulkControls(); $('start-bulk-update').disabled = true;
+        for (const id of ['close-bulk-update', 'dismiss-bulk-update']) $(id).disabled = true;
+        $('bulk-update-status').textContent = '正在逐台下发任务，请等待本批下发完成。';
+        $('bulk-update-progress').max = candidates.length; $('bulk-update-progress').value = 0;
+        await bulkWork(candidates, request, async item => {
+            item.eligible = false; item.watch = true;
+            const response = await api('backend-update', {id: item.id}, 20000);
+            if (!bulkCurrent(request)) return;
+            item.data = response.data; item.submitted = activeJob(item.data);
+            if (!item.submitted) item.error = '未创建更新任务，请重新读取状态。';
+        });
+        if (!bulkCurrent(request)) return;
+        bulkUpdating = false; updateBulkControls();
+        for (const id of ['close-bulk-update', 'dismiss-bulk-update']) $(id).disabled = false;
+        $('start-bulk-update').textContent = '本批下发已结束';
+        $('bulk-update-status').textContent = bulkSummary() + '。关闭后已下发任务继续执行，未完成项可重新预览。';
+        bulkTimer = setTimeout(() => pollBulk(request), 5000);
+    });
+    for (const id of ['close-bulk-update', 'dismiss-bulk-update']) $(id).addEventListener('click', () => { if (!bulkUpdating) $('bulk-update').close(); });
+    $('bulk-update').addEventListener('cancel', event => { if (bulkUpdating) event.preventDefault(); });
+    $('bulk-update').addEventListener('close', invalidateBulk);
+    $('bulk-update-selected').addEventListener('click', () => openBulkUpdate(false));
+    $('bulk-update-all').addEventListener('click', () => openBulkUpdate(true));
+    $('select-server-page').addEventListener('change', () => {
+        for (const server of rows.filter(server => server.is_active)) {
+            if ($('select-server-page').checked) selectedServers.set(server.id, server); else selectedServers.delete(server.id);
+        }
+        renderServers();
+    });
+    $('clear-server-selection').addEventListener('click', () => { selectedServers.clear(); renderServers(); });
     async function checkUpdate() {
         if (checkingUpdate || installingUpdate) return;
         checkingUpdate = true; updateInfo = null; const request = ++updateRequest;

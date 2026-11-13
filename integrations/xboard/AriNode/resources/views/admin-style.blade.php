@@ -90,6 +90,21 @@ tbody tr:hover td { background:var(--ui-surface-2); }
 .actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
 .actions .button { min-height:30px; padding:5px 9px; font-size:11px; }
 .actions-heading { text-align:right; }
+.server-bulk-toolbar { display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--ui-border); background:var(--ui-surface); }
+.page-select { display:inline-flex; align-items:center; gap:8px; margin:0; cursor:pointer; white-space:nowrap; }
+.page-select input { width:16px; height:16px; margin:0; }
+.selection-count { color:var(--ui-muted); font-size:11px; white-space:nowrap; }
+.bulk-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:7px; margin-left:auto; }
+.bulk-actions .button { min-height:30px; padding:5px 9px; font-size:11px; }
+.select-column { width:44px; }
+.selection-cell { width:44px; text-align:center; }
+.selection-cell input { width:16px; height:16px; margin:0; vertical-align:middle; }
+.bulk-update-dialog { width:min(760px,calc(100% - 28px)); }
+.bulk-results-wrap { max-height:48vh; overflow:auto; margin-top:16px; border:1px solid var(--ui-border); border-radius:7px; }
+.bulk-results { min-width:520px; }
+.bulk-results th,.bulk-results td { padding:10px 12px; }
+.bulk-results td { overflow-wrap:anywhere; }
+.bulk-progress { display:block; width:100%; height:8px; margin-top:14px; accent-color:var(--ui-primary); }
 .panel-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:56px; border-top:1px solid var(--ui-border); padding:11px 14px; color:var(--ui-muted); font-size:12px; }
 .pager { display:flex; align-items:center; gap:8px; white-space:nowrap; }
 .pager>span { text-align:center; min-width:45px; font-variant-numeric:tabular-nums; }
@@ -163,6 +178,12 @@ textarea.command:focus-visible { outline-offset:-3px; }
     .toolbar { flex-wrap:wrap; padding:12px; }
     .toolbar input[type=search] { width:auto; flex:1; min-width:0; }
     .toolbar-note { display:none; }
+    .server-bulk-toolbar { align-items:flex-start; flex-wrap:wrap; gap:8px; padding:10px 12px; }
+    .selection-count { margin-left:auto; }
+    .bulk-actions { width:100%; justify-content:flex-start; margin-left:0; }
+    .bulk-results { min-width:0; }
+    .bulk-results td>* { min-width:0; }
+    .selection-cell { width:100%; }
     .table-wrap { overflow:visible; }
     table,tbody,tr,td { display:block; width:100%; min-width:0; }
     thead { display:none; }

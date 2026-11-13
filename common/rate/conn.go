@@ -33,3 +33,17 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 	}
 	return n, err
 }
+
+// Expose control interfaces (for example Mieru's handshake reporter) while
+// keeping optimized copies on this connection's rate-limited Read and Write.
+func (c *Conn) Upstream() any {
+	return c.Conn
+}
+
+func (c *Conn) ReaderReplaceable() bool {
+	return false
+}
+
+func (c *Conn) WriterReplaceable() bool {
+	return false
+}

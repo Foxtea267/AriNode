@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 ## XBoard 插件内置页面
 
-上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.9.1**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称，按需勾选节点并保存，即可复制一键安装命令，默认 sing-box。命令包含有效期 30 分钟的注册码，AriNode 注册后自动获取机器凭据、节点绑定和配置。
+上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.9.2**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称，按需勾选节点并保存，即可复制一键安装命令，默认 sing-box。命令包含有效期 30 分钟的注册码，AriNode 注册后自动获取机器凭据、节点绑定和配置。
 
 原生 **服务器与部署命令** 表格将命令列固定为 290px、部署提示列固定为 140px，每行提供 **复制命令** 按钮，复制内容为完整命令。注册码过期时提示刷新列表，浏览器拒绝自动复制时显示并选中完整命令，可按 Ctrl+C / ⌘C。由 Laravel 提供的 `secure_path` 管理页会自动加载此功能。独立静态后台可通过自身同源地址加载 `/arinode/native-table.css` 和带 `defer` 的 `/arinode/native-table.js`，或使用 `/arinode/admin`。自定义 CSP 需允许这些同源脚本和样式。[静态后台接入说明](docs/xboard-plugin.md#原生后台表格中的部署命令)。
 
@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 首次手动升级至 0.5.0 后，可直接在页面点击“插件更新”检查并安装官方新版：自动校验、备份和失败回滚，保留绑定与密钥。[在线更新说明](docs/xboard-plugin.md#页面内一键更新插件)。
 
-在服务器列表点击 **更新后端** → **更新到最新正式版**，可更新对应 VPS。通过 HTTPS 注册并采用官方 Linux systemd 安装方式的节点会回报任务状态，健康检查失败时尝试恢复旧版。旧版 agent 首次运行 `sudo anctl upgrade`，安装更新会短暂重启该 VPS 上的 AriNode。[后端更新条件与日志](docs/xboard-plugin.md#手动更新-vps-后端)。
+可在服务器列表跨页勾选服务器，点击 **批量更新后端**；点击 **全部更新后端** 会包含所有页面并忽略当前搜索筛选，停用机器也会显示在预览中并标明跳过。确认预览时点击 **下发更新任务** 后，浏览器逐台查询状态并排队，同时最多处理 3 台，完成后显示逐台结果。停用、离线、多个 agent 冲突或已有任务的机器会跳过。操作复用每台机器现有的状态查询和更新队列，没有额外的后端批处理接口。通过 HTTPS 注册并采用官方 Linux systemd 安装方式的节点会回报任务状态，健康检查失败时尝试恢复旧版。旧版 agent 首次运行 `sudo anctl upgrade`；每台被更新的 VPS 上 AriNode 会短暂重启。[后端更新条件与日志](docs/xboard-plugin.md#手动更新-vps-后端)。
 
 支持插件菜单的 XBoard 后台会出现 **AriNode 服务器管理 → 服务器与部署命令 / 可绑定节点**。原有 JSON 下发和节点组接口继续保留。见[页面使用、安装范围与兼容说明](docs/xboard-plugin.md)。
 
