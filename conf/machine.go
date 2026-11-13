@@ -59,6 +59,32 @@ func (p *Conf) BindingPanels() []PanelSummary {
 	return result
 }
 
+// UpdateMachines includes both enrolled machines and existing machine-mode
+// nodes. Use one credential per physical machine registration.
+func (p *Conf) UpdateMachines() []MachineBinding {
+	result := make([]MachineBinding, 0, len(p.Machines))
+	seen := make(map[string]bool)
+	add := func(m MachineBinding) {
+		host, err := PanelURL(m.APIHost)
+		if err != nil || !strings.HasPrefix(host, "https://") || m.MachineID <= 0 || m.APIKey == "" || seen[m.ID()] {
+			return
+		}
+		m.APIHost = host
+		seen[m.ID()] = true
+		result = append(result, m)
+	}
+	for _, m := range p.Machines {
+		add(m)
+	}
+	for _, n := range p.NodeConfig {
+		if n.ApiConfig.Cluster == nil {
+			a := n.ApiConfig
+			add(MachineBinding{APIHost: a.APIHost, APIKey: a.Key, MachineID: a.MachineID})
+		}
+	}
+	return result
+}
+
 func (m MachineBinding) ValidateCache(root string) error {
 	dir := m.CacheDir(root)
 	for _, path := range []string{filepath.Dir(dir), dir} {

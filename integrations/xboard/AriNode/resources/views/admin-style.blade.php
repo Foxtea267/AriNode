@@ -87,7 +87,7 @@ tbody tr:hover td { background:var(--ui-surface-2); }
 .pill.enabled { background:var(--ui-surface-3); color:var(--ui-fg); }
 .status-dot { width:5px; height:5px; border-radius:50%; background:currentColor; opacity:.65; }
 .node-pills { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px; }
-.actions { display:flex; gap:6px; justify-content:flex-end; }
+.actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
 .actions .button { min-height:30px; padding:5px 9px; font-size:11px; }
 .actions-heading { text-align:right; }
 .panel-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:56px; border-top:1px solid var(--ui-border); padding:11px 14px; color:var(--ui-muted); font-size:12px; }

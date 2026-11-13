@@ -41,8 +41,7 @@ var serverCommand = cobra.Command{
 
 func init() {
 	serverCommand.PersistentFlags().
-		StringVarP(&config, "config", "c",
-			"/etc/arinode/config.json", "config file path")
+		StringVarP(&config, "config", "c", defaultPanelConfig, "config file path")
 	serverCommand.PersistentFlags().
 		BoolVarP(&watch, "watch", "w",
 			true, "watch file path change")
@@ -116,6 +115,8 @@ func serverHandle(_ *cobra.Command, _ []string) {
 			return
 		}
 	}
+	reloadBackendUpdates, stopBackendUpdates := startBackendUpdates(c, config, statusListen)
+	defer stopBackendUpdates()
 	xdns := os.Getenv("XRAY_DNS_PATH")
 	sdns := os.Getenv("SING_DNS_PATH")
 	if watch {
@@ -138,6 +139,7 @@ func serverHandle(_ *cobra.Command, _ []string) {
 				return err
 			}
 			removeDisconnectedPanelFiles(c, next, filepath.Dir(config))
+			reloadBackendUpdates(next)
 			monitors.Reconcile(next.Komari)
 			log.Info("Node bindings reconciled")
 			runtime.GC()
@@ -198,6 +200,7 @@ func serveStatus(address string, nodes *node.Node, monitors *komari.Manager, man
 	started := time.Now().UTC()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-AriNode-Version", version)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
 	})

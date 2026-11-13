@@ -1,6 +1,6 @@
 # AriNode 服务器管理
 
-插件版本 **0.7.0**。安装 / 升级后启用插件，并刷新 XBoard 管理员后台。
+插件版本 **0.8.0**。安装 / 升级后启用插件，并刷新 XBoard 管理员后台。
 
 ## 节点配置自动下发
 
@@ -17,6 +17,10 @@
 更新会保留 XBoard 中的服务器、节点绑定、机器密钥及插件配置。旧文件保存在 `<XBoard>/plugins/.arinode-updates/<备份编号>/backup`；失败时自动恢复文件与插件数据库状态，不卸载插件。不支持包含数据库迁移的更新包，这类版本需走 XBoard 手动升级流程。备份需由管理员按需要清理。
 
 要求 PHP cURL / ZIP 扩展、面板能访问 GitHub API 与 raw.githubusercontent.com，且 PHP 运行用户可写插件父目录。在线更新同时清理视图和路由缓存；检测到 Octane 时尝试平滑重载工作进程，失败会明确提示执行 `php artisan octane:reload`。其他自定义常驻 PHP 容器需自行重载。此功能不更新各 VPS 上的 AriNode / anctl。
+
+### 手动更新 VPS 后端
+
+在服务器列表中点击 **更新后端** → **更新到最新正式版**。使用 HTTPS 机器模式和官方 Linux systemd 安装方式的 VPS 会领取任务并回报状态。旧版先运行一次 `sudo anctl upgrade`。安装新版会重启这台 VPS 上的 AriNode，健康检查失败时会尝试恢复旧版。[运行条件与故障日志](https://github.com/Foxtea267/AriNode/blob/main/docs/xboard-plugin.md#手动更新-vps-后端)。
 
 ## 内置页面
 

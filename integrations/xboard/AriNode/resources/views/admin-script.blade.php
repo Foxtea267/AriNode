@@ -4,6 +4,7 @@
     let token = '', page = 1, total = 0, rows = [], nodes = [], editing = null, deploying = null;
     let commandRequest = 0, saving = false;
     let updateInfo = null, checkingUpdate = false, installingUpdate = false, updateRequest = 0;
+    let backendServer = null, backendRequest = 0, backendTimer = 0, queuingBackend = false;
     const selected = new Set();
     function notice(message, error = false) {
         $('notice').textContent = message; $('notice').hidden = !message;
@@ -22,7 +23,7 @@
         if (!response.ok) {
             if (response.status === 401 || response.status === 403) {
                 $('auth').hidden = false; $('workspace').hidden = true;
-                $('server-dialog').close(); $('deployment').close(); $('plugin-update').close(); invalidateCommand();
+                $('server-dialog').close(); $('deployment').close(); $('plugin-update').close(); $('backend-update').close(); invalidateCommand();
             }
             throw new Error(Object.values(data.errors || {}).flat().join('；') || data.message || '请求失败（' + response.status + '）');
         }
@@ -104,6 +105,7 @@
             cell(row, '绑定节点').append(bindings); cell(row, '最后上报').textContent = date(server.last_seen_at);
             const actions = document.createElement('div'); actions.className = 'actions';
             actions.append(button('编辑绑定', async () => openEditor(server)), button('部署命令', async () => { deploying = server; await showCommand(); }));
+            if (server.is_active) actions.append(button('更新后端', async () => openBackendUpdate(server)));
             cell(row, '操作').append(actions); list.append(row);
         });
         if (!rows.length) emptyRow(list, 5, '还没有匹配的服务器', '点击右上角“添加服务器”开始部署，或调整搜索条件。');
@@ -169,6 +171,65 @@
         for (const id of ['save-server', 'close-server', 'cancel-server']) $(id).disabled = value;
         $('save-server').textContent = value ? '正在保存…' : '保存并生成部署命令';
     }
+    function showBackendUpdate(data) {
+        $('backend-update-current').textContent = data.version || '—';
+        const job = data.job, state = job?.state;
+        const active = state === 'pending' || state === 'running';
+        $('send-backend-update').disabled = !data.ready || active || queuingBackend;
+        const messages = {
+            pending: '更新任务已下发，等待节点领取。',
+            running: '节点正在更新，请等待重启后的检查结果。',
+            succeeded: '更新成功，后端已运行 ' + (job?.version || '新版本') + '。',
+            current: '后端已经是最新正式版。',
+            failed: '更新失败，请在 VPS 查看 journalctl -u arinode-panel-upgrade.service。',
+            expired: '任务超时，请核对后端版本后重试。'
+        };
+        $('backend-update-status').textContent = messages[state] || (data.ready ? '后端已就绪。' : data.conflict
+            ? '同一机器记录收到多台服务器的上报，请给各 VPS 使用独立机器记录。'
+            : '节点尚未上报更新能力。旧版请先在 VPS 执行 sudo anctl upgrade。');
+    }
+    async function refreshBackendUpdate(queue = false) {
+        const server = backendServer, request = ++backendRequest;
+        if (!server) return;
+        clearTimeout(backendTimer);
+        errorAt('backend-update-error');
+        if (queue) {
+            queuingBackend = true;
+            $('send-backend-update').disabled = true;
+        }
+        try {
+            const response = await (queue ? api('backend-update', {id: server.id}) : api('backend-update?id=' + server.id));
+            if (request !== backendRequest || !$('backend-update').open) return;
+            queuingBackend = false;
+            showBackendUpdate(response.data);
+        } catch (e) {
+            if (request === backendRequest) errorAt('backend-update-error', e.message);
+        } finally {
+            if (request === backendRequest && $('backend-update').open) {
+                queuingBackend = false;
+                backendTimer = setTimeout(() => refreshBackendUpdate(), 5000);
+            }
+        }
+    }
+    function openBackendUpdate(server) {
+        backendServer = server;
+        $('backend-update-target').textContent = server.name;
+        $('backend-update-current').textContent = '—';
+        $('backend-update-status').textContent = '正在读取后端状态…';
+        $('send-backend-update').disabled = true;
+        $('backend-update').showModal();
+        return refreshBackendUpdate();
+    }
+    $('close-backend-update').addEventListener('click', () => $('backend-update').close());
+    $('backend-update').addEventListener('close', () => {
+        backendRequest++;
+        clearTimeout(backendTimer);
+        backendServer = null;
+        queuingBackend = false;
+    });
+    $('send-backend-update').addEventListener('click', () => {
+        if (!queuingBackend && !$('send-backend-update').disabled) refreshBackendUpdate(true);
+    });
     async function checkUpdate() {
         if (checkingUpdate || installingUpdate) return;
         checkingUpdate = true; updateInfo = null; const request = ++updateRequest;

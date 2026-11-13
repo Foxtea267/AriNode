@@ -7,12 +7,15 @@ use Plugin\AriNode\Controllers\AdminController;
 use Plugin\AriNode\Controllers\UpdateController;
 use Plugin\AriNode\Controllers\ConfigController;
 use Plugin\AriNode\Controllers\EnrollmentController;
+use Plugin\AriNode\Controllers\BackendUpdateController;
 
 Route::middleware('throttle:30,1')->post('/api/v1/arinode/enroll', [EnrollmentController::class, 'enroll']);
 
 Route::middleware('admin')->group(function () {
     Route::get('/api/v1/arinode/admin/update', [UpdateController::class, 'check']);
     Route::post('/api/v1/arinode/admin/update', [UpdateController::class, 'install']);
+    Route::get('/api/v1/arinode/admin/backend-update', [BackendUpdateController::class, 'status']);
+    Route::post('/api/v1/arinode/admin/backend-update', [BackendUpdateController::class, 'queue']);
     Route::get('/api/v1/arinode/admin/entry', [AdminController::class, 'entry']);
     Route::get('/api/v1/arinode/admin/servers', [AdminController::class, 'servers']);
     Route::get('/api/v1/arinode/admin/nodes', [AdminController::class, 'nodes']);
@@ -31,6 +34,7 @@ Route::middleware('admin')->group(function () {
 Route::middleware('admin')->post('/api/v1/arinode/provision', [ProvisionController::class, 'provision']);
 Route::middleware('admin')->get('/api/v1/arinode/cluster/members', [ClusterController::class, 'members']);
 Route::middleware('server.v2')->group(function () {
+    Route::post('/api/v1/arinode/backend-update', [BackendUpdateController::class, 'agent']);
     Route::get('/api/v1/arinode/node/config', [ConfigController::class, 'download']);
     Route::get('/api/v1/arinode/devices/alivelist', [ClusterController::class, 'devices']);
     Route::get('/api/v1/arinode/cluster/info', [ClusterController::class, 'info']);

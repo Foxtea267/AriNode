@@ -79,6 +79,16 @@
     </div>
     <div class="dialog-footer"><button id="check-update" class="button subtle" type="button">检查更新</button><button id="install-update" class="button" type="button" disabled>立即更新</button><button id="reload-update" class="button" type="button" hidden>刷新页面</button></div>
 </dialog>
+<dialog id="backend-update" aria-labelledby="backend-update-title">
+    <div class="dialog-heading"><div><h2 id="backend-update-title">更新后端</h2><p id="backend-update-target"></p></div><button id="close-backend-update" class="icon-button" type="button" aria-label="关闭后端更新">×</button></div>
+    <div class="dialog-body">
+        <div class="update-versions"><div><span>当前后端版本</span><strong id="backend-update-current">—</strong></div></div>
+        <p id="backend-update-status" class="field-help" role="status" aria-live="polite"></p>
+        <p id="backend-update-error" class="form-error" role="alert" hidden></p>
+        <div class="deployment-note">节点收到任务后会安装最新正式版。更新会重启这台 VPS 上的 AriNode 服务，短暂中断该进程下所有面板的连接。</div>
+    </div>
+    <div class="dialog-footer"><button id="send-backend-update" class="button" type="button" disabled>更新到最新正式版</button></div>
+</dialog>
 <script>@include('AriNode::admin-theme')</script>
 <script>@include('AriNode::admin-script')</script>
 </body>

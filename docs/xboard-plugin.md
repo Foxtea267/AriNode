@@ -2,7 +2,7 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.7.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.8.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
 
 ## 配置自动下发
 
@@ -17,6 +17,14 @@
 服务器记录、绑定和密钥保存在 XBoard 数据库中，更新不会卸载或重建。更新失败会恢复插件文件、版本、启用状态和配置。旧版保存在 `<XBoard>/plugins/.arinode-updates/<备份编号>/backup`，可按需保留或清理。包含数据库迁移的包要求手动升级，避免不可逆 DDL 导致无法回滚。
 
 面板 PHP 需启用 cURL 和 ZIP，运行用户需能写插件父目录，网络需能访问 GitHub API 和 raw.githubusercontent.com。自动清理 Blade/路由缓存；Octane 使用平滑 reload，若无法自动重载会给出命令提示。自定义常驻 PHP 服务需要自行重载。插件更新不影响 VPS 上 AriNode 的程序版本。
+
+## 手动更新 VPS 后端
+
+在 AriNode 插件的服务器列表中，点击目标服务器的 **更新后端**，查看当前版本后点击 **更新到最新正式版**。服务器领取任务后校验并安装 GitHub 正式版。页面显示待领取、更新中、完成或失败。已是最新版本时无需重启。
+
+支持官方脚本安装的 Linux systemd 服务和通过 HTTPS 注册的机器模式（也支持暂未绑定节点的服务器）。面板使用 Redis 保存任务，每台 VPS 应使用独立的机器记录。旧版后端需先在 VPS 执行一次 `sudo anctl upgrade`。后端需要能够访问 GitHub Releases。
+
+安装新版会短暂重启目标 VPS 上的 AriNode，影响该进程上的所有面板绑定。若新版未通过本机健康检查，更新器会尝试恢复旧版。失败详情可在 VPS 上运行 `sudo journalctl -u arinode-panel-upgrade.service -n 80 --no-pager` 查看。手动更新与 `anctl upgrade auto` 的设置独立。
 
 维护者修改插件后运行 `python3 scripts/package-xboard-plugin.py` 同步生成 ZIP 和校验清单；CI 会检查两者与源码一致。
 

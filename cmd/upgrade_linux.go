@@ -63,25 +63,32 @@ func init() {
 }
 
 func installLatestRelease() error {
+	_, err := installStableRelease(nil)
+	return err
+}
+
+// check is called after restarting the new binaries and again after a rollback.
+// It is nil for the original command-line and timer upgrade paths.
+func installStableRelease(check func() error) (string, error) {
 	if os.Geteuid() != 0 {
-		return fmt.Errorf("installing an upgrade requires root (use sudo anctl upgrade)")
+		return "", fmt.Errorf("installing an upgrade requires root (use sudo anctl upgrade)")
 	}
 	executable, err := os.Executable()
 	if err != nil {
-		return err
+		return "", err
 	}
 	resolved, err := filepath.EvalSymlinks(executable)
 	if err != nil {
-		return err
+		return "", err
 	}
 	directory := filepath.Dir(resolved)
 	lock, err := os.OpenFile(filepath.Join(directory, ".arinode-upgrade.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer lock.Close()
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		return fmt.Errorf("another AriNode upgrade is running: %w", err)
+		return "", fmt.Errorf("another AriNode upgrade is running: %w", err)
 	}
 	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -89,21 +96,21 @@ func installLatestRelease() error {
 	client := upgrade.NewClient()
 	release, asset, err := client.Latest(ctx, runtime.GOARCH)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !upgrade.Newer(version, release.Tag) {
 		fmt.Fprintf(os.Stdout, "AriNode %s is current; latest stable is %s\n", version, release.Tag)
-		return nil
+		return version, nil
 	}
 	client.HTTP.Timeout = 5 * time.Minute
 	archive, err := client.Download(ctx, asset, directory)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer os.Remove(archive)
 	staging, err := upgrade.ExtractBinaries(archive, directory)
 	if err != nil {
-		return err
+		return "", err
 	}
 	cleanStaging := false
 	defer func() {
@@ -112,7 +119,7 @@ func installLatestRelease() error {
 		}
 	}()
 	if err := verifyReleaseBinaries(ctx, staging, release.Tag); err != nil {
-		return err
+		return "", err
 	}
 	var restart func() error
 	if systemctl("is-active", "--quiet", "arinode.service") == nil {
@@ -120,15 +127,20 @@ func installLatestRelease() error {
 			if err := systemctl("restart", "arinode.service"); err != nil {
 				return err
 			}
+			if check != nil {
+				return check()
+			}
 			return systemctl("is-active", "--quiet", "arinode.service")
 		}
+	} else if check != nil {
+		return "", fmt.Errorf("arinode.service is no longer active")
 	}
 	if err := upgrade.ReplaceBinaries(staging, directory, restart); err != nil {
-		return err
+		return "", err
 	}
 	cleanStaging = true
 	fmt.Fprintf(os.Stdout, "AriNode upgraded to %s\n", release.Tag)
-	return nil
+	return release.Tag, nil
 }
 
 func verifyReleaseBinaries(ctx context.Context, staging, tag string) error {

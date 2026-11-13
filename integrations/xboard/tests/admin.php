@@ -68,6 +68,7 @@ namespace {
     use Illuminate\View\Factory;
     use Illuminate\View\FileViewFinder;
     use Plugin\AriNode\Controllers\AdminController;
+    use Plugin\AriNode\Controllers\BackendUpdateController;
     use Plugin\AriNode\Services\Deployment;
     use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -118,6 +119,7 @@ namespace {
     });
     require __DIR__ . '/../AriNode/Services/Deployment.php';
     require __DIR__ . '/../AriNode/Controllers/AdminController.php';
+    require __DIR__ . '/../AriNode/Controllers/BackendUpdateController.php';
     require __DIR__ . '/../AriNode/Controllers/ConfigController.php';
     require __DIR__ . '/../AriNode/Controllers/EnrollmentController.php';
     require __DIR__ . '/../AriNode/routes/api.php';
@@ -130,10 +132,14 @@ namespace {
     }
     check($routes['/arinode/admin']->methods() === ['GET', 'HEAD'], 'HTML shell route missing');
     check(in_array('server.v2', $routes['/api/v1/arinode/node/config']->gatherMiddleware(), true), 'Configuration download is not machine authenticated');
+    check(in_array('server.v2', $routes['/api/v1/arinode/backend-update']->gatherMiddleware(), true), 'Backend update polling is not machine authenticated');
     check(in_array('throttle:30,1', $routes['/api/v1/arinode/enroll']->gatherMiddleware(), true), 'Enrollment is not rate limited');
     $updateRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/update');
     check(count($updateRoutes) === 2, 'Update must provide separate GET check and POST install routes');
     foreach ($updateRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected update route'); }
+    $backendRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/backend-update');
+    check(count($backendRoutes) === 2, 'Backend update needs separate GET and POST routes');
+    foreach ($backendRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected backend update route'); }
     $testAdminPath = '';
     require __DIR__ . '/../AriNode/routes/api.php';
     $emptyPath = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v2/plugin/ari-node/servers/fetch');
@@ -236,7 +242,50 @@ namespace {
     $quoted = data($controller->command(req(['id'=>$empty])))['data']['command'];
     $emptyCode = $codeFrom($quoted);
     check(data($enrollment->enroll(req(['code'=>$emptyCode])))['machine_id'] === $empty, 'Empty machine could not enroll');
+    $backendCache = new class {
+        public array $entries = [];
+        public function store(string $name): self { check($name === 'redis', 'Updates need the shared cache'); return $this; }
+        public function get(string $key, array $fallback): array { return $this->entries[$key] ?? $fallback; }
+        public function put(string $key, array $value, int $seconds): void { $this->entries[$key] = $value; }
+        public function lock(string $key, int $seconds): self { return $this; }
+        public function block(int $seconds, callable $call): mixed { return $call(); }
+    };
+    $container->instance('cache', $backendCache);
+    $updates = new BackendUpdateController();
+    $emptyMachine = ServerMachine::findOrFail($empty);
+    $agentID = str_repeat('a', 32);
+    $agentRequest = function (ServerMachine $machine, string $action, array $payload = []) use ($agentID): Request {
+        $request = req($payload + ['action' => $action, 'agent' => $agentID, 'version' => '20261113-12345678']);
+        $request->attributes->set('machine_info', $machine);
+        return $request;
+    };
+    check(!data($updates->status(req(['id' => $empty])))['data']['ready'], 'Machine advertised updates without polling');
+    rejects(fn() => $updates->queue(req(['id' => $empty])), HttpException::class);
+    rejects(fn() => $updates->agent(req(['action' => 'poll', 'machine_id' => $empty])), HttpException::class);
+    check(data($updates->agent($agentRequest($emptyMachine, 'poll')))['data']['job'] === null, 'Polling must never queue a job');
+    $job = data($updates->queue(req(['id' => $empty])))['data']['job'];
+    check($job['state'] === 'pending' && !isset($job['agent']), 'Admin did not see the sanitized pending job');
+    check(data($updates->queue(req(['id' => $empty])))['data']['job']['id'] === $job['id'], 'Repeated update queued a second job');
+    check(data($updates->agent($agentRequest($other, 'poll')))['data']['job'] === null, 'Another machine received the job');
+    rejects(fn() => $updates->agent($agentRequest($other, 'claim', ['job' => $job['id']])), HttpException::class);
+    check(data($updates->agent($agentRequest($emptyMachine, 'poll')))['data']['job'] === $job['id'], 'Registered unbound machine could not poll for its job');
+    $updates->agent($agentRequest($emptyMachine, 'poll', ['agent' => str_repeat('b', 32)]));
+    check(data($updates->status(req(['id' => $empty])))['data']['conflict'], 'Shared registration conflict was not detected');
+    rejects(fn() => $updates->agent($agentRequest($emptyMachine, 'claim', ['job' => $job['id']])), HttpException::class);
+    $updateKey = 'arinode:backend-update:' . $empty . ':' . Deployment::credentialFingerprint($emptyMachine->token);
+    $backendCache->entries[$updateKey]['agents'][str_repeat('b', 32)]['seen_at'] -= 121;
+    check(data($updates->agent($agentRequest($emptyMachine, 'claim', ['job' => $job['id']])))['data']['accepted'], 'Sole machine could not claim the job');
+    rejects(fn() => $updates->agent($agentRequest($emptyMachine, 'claim', ['job' => $job['id']])), HttpException::class);
+    $finished = $agentRequest($emptyMachine, 'finish', ['job' => $job['id'], 'version' => '20261114-87654321', 'result' => 'succeeded']);
+    $updates->agent($finished);
+    $updates->agent($finished);
+    $result = data($updates->status(req(['id' => $empty])))['data'];
+    check($result['job']['state'] === 'succeeded' && $result['version'] === '20261114-87654321', 'Finished job did not report the installed version');
+    $updates->queue(req(['id' => $empty]));
+    $backendCache->entries[$updateKey]['job']['deadline'] = time() - 1;
+    check(data($updates->status(req(['id' => $empty])))['data']['job']['state'] === 'expired', 'Unclaimed job did not expire');
     ServerMachine::whereKey($empty)->update(['token'=>'rotated']);
+    check(data($updates->status(req(['id' => $empty])))['data']['job'] === null, 'Token rotation retained the old job');
     check($enrollment->enroll(req(['code'=>$emptyCode]))->getStatusCode() === 403, 'A rotated machine token did not revoke an earlier code');
     [$encoded] = explode('.', $emptyCode);
     $expired = json_decode(base64_decode(strtr($encoded, '-_', '+/')), true);
