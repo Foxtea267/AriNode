@@ -2,7 +2,7 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.9.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.9.1** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
 
 ## 配置自动下发
 
@@ -41,6 +41,21 @@ https://你的面板域名/arinode/admin
 也可以从侧栏 **AriNode 服务器管理 → 管理页面** 点击打开链接，或在插件说明中点击“打开 AriNode 可视化服务器管理页”。新版后台原有的 **服务器与部署命令 / 可绑定节点** 页面继续提供兼容入口。
 
 页面自动读取官方新版后台的 `XBOARD_ACCESS_TOKEN` 登录记录并检查有效期。旧版 / 定制后台存储方式不同，可临时填入管理员 Authorization 凭证；它仅留在当前页面内存中。普通用户或未登录访客无法读取服务器、节点或部署命令，也无法修改绑定。公开 HTML 外壳不含密钥或服务器资料。
+
+## 原生后台表格中的部署命令
+
+插件 0.9.1 调整 XBoard 原生 **AriNode 服务器管理 → 服务器与部署命令** 表格。命令列固定为 290px，长命令以省略形式显示，每行提供 **复制命令** 按钮。按钮复制完整命令，部署提示列固定为 140px 并允许换行。注册码过期时会提示刷新列表后重新复制。浏览器拒绝自动复制时，弹窗显示并选中完整命令，可按 Ctrl+C / ⌘C 复制。
+
+由 Laravel 在配置的 `secure_path` 提供的管理页，会在插件启用时自动加载同源样式和脚本。升级插件后刷新管理页即可。
+
+如果前后端分离，静态后台入口由独立 Web 服务器直接提供，则需在该入口加载以下资源，并将这两个同源路径代理到安装插件的 XBoard 后端。
+
+```html
+<link rel="stylesheet" href="/arinode/native-table.css">
+<script defer src="/arinode/native-table.js"></script>
+```
+
+资源遵循后台现有 CSP，自定义策略需允许这些同源脚本和样式。也可直接使用后端提供的 `/arinode/admin` 内置页面获取部署命令。
 
 ## 添加服务器
 

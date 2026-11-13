@@ -37,11 +37,21 @@ jobs:
           php integrations/xboard/tests/cluster.php
           composer install --working-dir=integrations/xboard/tests --no-interaction --prefer-dist --no-progress
           php integrations/xboard/tests/admin.php
+          php integrations/xboard/tests/native-assets.php
           php integrations/xboard/tests/update.php
           python3 scripts/test-xboard-tls-patch.py
           python3 scripts/package-xboard-plugin.py --check
           node --check < integrations/xboard/AriNode/resources/views/admin-script.blade.php
           node --check < integrations/xboard/AriNode/resources/views/admin-theme.blade.php
+          node --check integrations/xboard/AriNode/resources/assets/native-table.js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check native plugin table layout and copy actions
+        run: |
+          npm install --prefix "$RUNNER_TEMP/arinode-browser-tests" --no-save playwright@1.56.1
+          node "$RUNNER_TEMP/arinode-browser-tests/node_modules/playwright/cli.js" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/arinode-browser-tests/node_modules" node integrations/xboard/tests/native-table.cjs
 
   release:
     if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')

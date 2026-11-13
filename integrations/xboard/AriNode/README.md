@@ -1,6 +1,6 @@
 # AriNode 服务器管理
 
-插件版本 **0.9.0**。安装 / 升级后启用插件，并刷新 XBoard 管理员后台。
+插件版本 **0.9.1**。安装 / 升级后启用插件，并刷新 XBoard 管理员后台。
 
 ## 节点配置自动下发
 
@@ -44,6 +44,12 @@
 已有 VPS 更换地址时，先保存新地址并生成命令，在 VPS 运行 `sudo anctl panel list`，使用 `sudo anctl panel remove 旧绑定ID` 移除旧地址，再执行新命令重新注册。移除旧绑定会停止其节点，注册完成前会有短暂中断。已有 VPS 需要重新注册以应用新地址并避免重复绑定。[完整配置说明](https://github.com/Foxtea267/AriNode/blob/main/docs/xboard-plugin.md#api-通讯地址)。
 
 支持插件菜单的 XBoard 后台还会增加 **AriNode 服务器管理 → 管理页面** 入口，点击链接打开完整页面。原生 **服务器与部署命令 / 可绑定节点** 页面继续提供兼容入口。
+
+### 原生表格与复制命令
+
+原生 **服务器与部署命令** 表格的命令列固定为 290px，每行提供 **复制命令** 按钮，复制完整命令。部署提示列为 140px 并允许换行。注册码过期时提示刷新列表，自动复制受浏览器限制时显示并选中命令，可按 Ctrl+C / ⌘C。
+
+由 Laravel 提供的 `secure_path` 管理页会自动加载此功能。独立静态后台入口需同源加载 `/arinode/native-table.css` 和带 `defer` 的 `/arinode/native-table.js`，并将资源路径代理到插件后端。自定义 CSP 需允许这些同源脚本和样式。也可使用已有 `/arinode/admin` 内置页面。[静态后台接入示例](https://github.com/Foxtea267/AriNode/blob/main/docs/xboard-plugin.md#原生后台表格中的部署命令)。
 
 节点协议、端口、订阅分组等仍在 XBoard 的节点管理中配置。其他服务器占用的节点不能直接抢占，需要先从原服务器解绑。XBoard 原生机器记录会显示在此页面；原有机器密钥不会因编辑而重置。
 

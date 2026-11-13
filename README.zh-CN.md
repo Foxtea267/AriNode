@@ -44,7 +44,9 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 ## XBoard 插件内置页面
 
-上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.9.0**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称，按需勾选节点并保存，即可复制一键安装命令，默认 sing-box。命令包含有效期 30 分钟的注册码，AriNode 注册后自动获取机器凭据、节点绑定和配置。
+上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.9.1**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称，按需勾选节点并保存，即可复制一键安装命令，默认 sing-box。命令包含有效期 30 分钟的注册码，AriNode 注册后自动获取机器凭据、节点绑定和配置。
+
+原生 **服务器与部署命令** 表格将命令列固定为 290px、部署提示列固定为 140px，每行提供 **复制命令** 按钮，复制内容为完整命令。注册码过期时提示刷新列表，浏览器拒绝自动复制时显示并选中完整命令，可按 Ctrl+C / ⌘C。由 Laravel 提供的 `secure_path` 管理页会自动加载此功能。独立静态后台可通过自身同源地址加载 `/arinode/native-table.css` 和带 `defer` 的 `/arinode/native-table.js`，或使用 `/arinode/admin`。自定义 CSP 需允许这些同源脚本和样式。[静态后台接入说明](docs/xboard-plugin.md#原生后台表格中的部署命令)。
 
 前后端分离部署时，点击右上角 **通讯设置**，将 **API 通讯地址** 设置为节点可访问的后端 HTTPS 根地址，例如 `https://api.example.com` 或 `https://api.example.com:8443/xboard`。XBoard 原生插件配置也可保存相同的 `api_url` 字段。优先使用显式 API 地址，其次是站点 `app_url`，最后是当前请求域名。新部署命令、原生插件服务器列表中的命令和 `/provision` 导出配置统一使用该地址。填写服务根地址，无需附加 `/api` 或 `/api/v1`，保存后生成新命令即可使用。
 

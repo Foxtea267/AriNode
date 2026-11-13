@@ -1,0 +1,73 @@
+/* Restricted to the AriNode command cells. Inherit the native admin theme. */
+:is(td, th).an-native-command-cell {
+    width: 290px !important;
+    max-width: 290px;
+    white-space: nowrap;
+}
+.an-native-command-card { grid-column: 1 / -1; min-width: 0; }
+.an-native-command-cell:not(td):not(th) { display: flex; justify-content: flex-end; align-items: center; gap: 8px; min-width: 0; }
+.an-native-command-cell:not(td):not(th) > .an-native-command { flex: 1; min-width: 0; max-width: 170px; }
+.an-native-command-cell:not(td):not(th) > .an-native-copy { flex-shrink: 0; margin-left: 0; }
+.an-native-command {
+    display: inline-block;
+    width: 170px;
+    max-width: calc(100vw - 160px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+}
+.an-native-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+    min-width: 72px;
+    height: 30px;
+    padding: 0 9px;
+    border: 1px solid currentColor;
+    border-color: color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.an-native-copy:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
+.an-native-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.an-native-copy:disabled { opacity: .5; cursor: wait; }
+.an-native-hint { width: 140px !important; max-width: 140px; white-space: normal; overflow-wrap: anywhere; }
+.an-native-offscreen { position: fixed; left: -10000px; top: 0; }
+.an-native-notice {
+    position: fixed;
+    z-index: 10000;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    padding: 12px 18px;
+    border: 1px solid #dce3e8;
+    border-radius: 8px;
+    background: #fff;
+    color: #11161b;
+    box-shadow: 0 4px 24px #0002;
+    font-size: 13px;
+}
+.an-native-dialog { width: min(620px, calc(100vw - 36px)); padding: 24px; border: 1px solid #dce3e8; border-radius: 10px; color: #11161b; background: #fff; }
+.an-native-dialog::backdrop { background: #0006; }
+.an-native-dialog h2 { font-size: 18px; margin: 0 0 12px; }
+.an-native-dialog p { font-size: 13px; }
+.an-native-dialog textarea { display: block; width: 100%; min-height: 160px; margin-bottom: 16px; padding: 10px; box-sizing: border-box; resize: vertical; color: inherit; background: transparent; border: 1px solid #dce3e8; border-radius: 6px; overflow-wrap: anywhere; }
+.an-native-dialog button { margin-left: 0; }
+:is(.dark, [data-theme="dark"]) .an-native-notice,
+:is(.dark, [data-theme="dark"]) .an-native-dialog { color: #edf1f4; background: #11171d; border-color: #303a44; }
+@media (prefers-color-scheme: dark) {
+    html:not(.light):not([data-theme="light"]) .an-native-notice,
+    html:not(.light):not([data-theme="light"]) .an-native-dialog { color: #edf1f4; background: #11171d; border-color: #303a44; }
+}

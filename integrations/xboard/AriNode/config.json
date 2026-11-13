@@ -1,7 +1,7 @@
 {
   "name": "AriNode 服务器管理",
   "code": "ari_node",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "服务器管理、节点绑定、配置自动下发与热更新、一键部署和插件在线更新；页面：/arinode/admin",
   "author": "AriNode",
   "type": "feature",
@@ -36,9 +36,9 @@
         {"key":"id","title":"机器 ID","type":"number"},
         {"key":"node_ids_text","title":"节点 ID","type":"string"},
         {"key":"is_active","title":"启用","type":"boolean"},
+        {"key":"install_command","title":"AriNode 一键部署命令","type":"string","width":290},
         {"key":"last_seen_at","title":"最后上报","type":"datetime"},
-        {"key":"install_command","title":"AriNode 一键部署命令","type":"string"},
-        {"key":"deploy_error","title":"部署提示","type":"string"}
+        {"key":"deploy_error","title":"部署提示","type":"string","width":140}
       ],
       "form":{
         "name":{"type":"string","label":"服务器名称","placeholder":"例如 US-01","required":true},
