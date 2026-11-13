@@ -8,6 +8,7 @@ use App\Models\ServerMachine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Plugin\AriNode\Services\Deployment;
+use Plugin\AriNode\Services\DeploymentSettings;
 use InvalidArgumentException;
 
 class ProvisionController extends PluginController
@@ -47,7 +48,8 @@ class ProvisionController extends PluginController
             return response()->json(['message' => 'Xboard server_token is not configured'], 503);
         }
 
-        $panelUrl = rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
+        try { $panelUrl = DeploymentSettings::panelUrl($request); }
+        catch (InvalidArgumentException $e) { return response()->json(['message' => $e->getMessage()], 422); }
         $core = $params['core'] ?? 'sing';
         $nodes = [];
         $clusterDomain = strtolower(rtrim(trim($params['cluster_domain'] ?? ''), '.'));

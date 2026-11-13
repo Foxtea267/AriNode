@@ -44,9 +44,15 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 ## XBoard 插件内置页面
 
-上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.6.0**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称、勾选节点并保存，即可复制带有面板地址、机器专属密钥、节点和内核的一键安装命令，默认 sing-box。
+上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.9.0**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称，按需勾选节点并保存，即可复制一键安装命令，默认 sing-box。命令包含有效期 30 分钟的注册码，AriNode 注册后自动获取机器凭据、节点绑定和配置。
+
+前后端分离部署时，点击右上角 **通讯设置**，将 **API 通讯地址** 设置为节点可访问的后端 HTTPS 根地址，例如 `https://api.example.com` 或 `https://api.example.com:8443/xboard`。XBoard 原生插件配置也可保存相同的 `api_url` 字段。优先使用显式 API 地址，其次是站点 `app_url`，最后是当前请求域名。新部署命令、原生插件服务器列表中的命令和 `/provision` 导出配置统一使用该地址。填写服务根地址，无需附加 `/api` 或 `/api/v1`，保存后生成新命令即可使用。
+
+已有 VPS 更换通讯地址时，先运行 `sudo anctl panel list`，用 `sudo anctl panel remove 旧绑定ID` 移除旧地址绑定，再执行新生成的部署命令。移除旧绑定会停止对应节点，重新注册完成前会有短暂中断。设置变更后，已有 VPS 需要按此流程重新注册。[API 地址配置说明](docs/xboard-plugin.md#api-通讯地址)。
 
 首次手动升级至 0.5.0 后，可直接在页面点击“插件更新”检查并安装官方新版：自动校验、备份和失败回滚，保留绑定与密钥。[在线更新说明](docs/xboard-plugin.md#页面内一键更新插件)。
+
+在服务器列表点击 **更新后端** → **更新到最新正式版**，可更新对应 VPS。通过 HTTPS 注册并采用官方 Linux systemd 安装方式的节点会回报任务状态，健康检查失败时尝试恢复旧版。旧版 agent 首次运行 `sudo anctl upgrade`，安装更新会短暂重启该 VPS 上的 AriNode。[后端更新条件与日志](docs/xboard-plugin.md#手动更新-vps-后端)。
 
 支持插件菜单的 XBoard 后台会出现 **AriNode 服务器管理 → 服务器与部署命令 / 可绑定节点**。原有 JSON 下发和节点组接口继续保留。见[页面使用、安装范围与兼容说明](docs/xboard-plugin.md)。
 

@@ -12,17 +12,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Plugin\AriNode\Services\Deployment;
+use Plugin\AriNode\Services\DeploymentSettings;
 
 class AdminController extends PluginController
 {
     private function enabled(): void
     {
         abort_if((bool) $this->beforePluginAction(), 403, 'AriNode plugin is disabled');
-    }
-
-    private function panelUrl(Request $request): string
-    {
-        return rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
     }
 
     public function page()
@@ -71,13 +67,18 @@ class AdminController extends PluginController
         $total = (clone $query)->count();
         $page = (int) ($params['current'] ?? 1);
         $size = (int) ($params['pageSize'] ?? 20);
-        $rows = $query->skip(($page - 1) * $size)->take($size)->get()->map(function (ServerMachine $machine) use ($request) {
+        $panel = '';
+        $panelError = '';
+        try { $panel = DeploymentSettings::panelUrl($request); }
+        catch (InvalidArgumentException $e) { $panelError = $e->getMessage(); }
+        $rows = $query->skip(($page - 1) * $size)->take($size)->get()->map(function (ServerMachine $machine) use ($panel, $panelError) {
             $ids = $machine->servers->pluck('id')->all();
             $command = '';
             $error = '';
             try {
                 if (!$machine->is_active) { throw new InvalidArgumentException('Server is disabled'); }
-                $command = Deployment::command($this->panelUrl($request), $machine->token, $machine->id, $machine->servers->where('enabled', true));
+                if ($panelError !== '') { throw new InvalidArgumentException($panelError); }
+                $command = Deployment::command($panel, $machine->token, $machine->id, $machine->servers->where('enabled', true));
             } catch (InvalidArgumentException $e) { $error = $e->getMessage(); }
             return ['id' => $machine->id, 'name' => $machine->name, 'notes' => $machine->notes,
                 'is_active' => (bool) $machine->is_active, 'last_seen_at' => $machine->last_seen_at,
@@ -145,12 +146,13 @@ class AdminController extends PluginController
         $machine = ServerMachine::query()->with('servers')->findOrFail($params['id']);
         abort_unless($machine->is_active, 422, 'Server is disabled');
         try {
-            $command = Deployment::command($this->panelUrl($request), $machine->token, $machine->id,
+            $panel = DeploymentSettings::panelUrl($request);
+            $command = Deployment::command($panel, $machine->token, $machine->id,
                 $machine->servers->where('enabled', true), $params['core'] ?? 'sing',
                 (bool) ($params['multi_node'] ?? true), (bool) ($params['multi_panel'] ?? true));
         } catch (InvalidArgumentException $e) {
             throw ValidationException::withMessages(['command' => $e->getMessage()]);
         }
-        return response()->json(['data' => ['command' => $command]])->header('Cache-Control', 'no-store');
+        return response()->json(['data' => ['command' => $command, 'api_url' => $panel]])->header('Cache-Control', 'no-store');
     }
 }

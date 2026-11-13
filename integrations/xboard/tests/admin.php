@@ -13,6 +13,12 @@ namespace App\Http\Controllers {
     }
 }
 namespace App\Models {
+    class Plugin extends \Illuminate\Database\Eloquent\Model {
+        protected $table = 'v2_plugins';
+        protected $guarded = [];
+        public $timestamps = false;
+        protected $casts = ['is_enabled' => 'boolean'];
+    }
     class Server extends \Illuminate\Database\Eloquent\Model {
         protected $table = 'v2_server';
         protected $guarded = [];
@@ -49,6 +55,7 @@ namespace App\Services {
 namespace {
     use App\Models\Server;
     use App\Models\ServerMachine;
+    use App\Models\Plugin;
     use App\Services\NodeSyncService;
     use Illuminate\Container\Container;
     use Illuminate\Database\Capsule\Manager as Capsule;
@@ -69,6 +76,8 @@ namespace {
     use Illuminate\View\FileViewFinder;
     use Plugin\AriNode\Controllers\AdminController;
     use Plugin\AriNode\Controllers\BackendUpdateController;
+    use Plugin\AriNode\Controllers\SettingsController;
+    use Plugin\AriNode\Controllers\ProvisionController;
     use Plugin\AriNode\Services\Deployment;
     use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -78,7 +87,7 @@ namespace {
         throw new \RuntimeException('Expected rejection: ' . $type);
     }
     function config($key) { return 'test-app-key'; }
-    function admin_setting($key, $default = null) { return ['secure_path'=>$GLOBALS['testAdminPath'] ?? 'test-admin', 'app_url'=>"https://panel.example.com/sub'path"][$key] ?? $default; }
+    function admin_setting($key, $default = null) { return ['secure_path'=>$GLOBALS['testAdminPath'] ?? 'test-admin', 'app_url'=>$GLOBALS['testAppUrl'] ?? "https://panel.example.com/sub'path"][$key] ?? $default; }
     function app($key = null) { return $key ? $GLOBALS['container']->make($key) : $GLOBALS['container']; }
     function abort_if($condition, $code, $message): void { if ($condition) { throw new HttpException($code, $message); } }
     function abort_unless($condition, $code, $message): void { abort_if(!$condition, $code, $message); }
@@ -108,6 +117,11 @@ namespace {
     $finder = new FileViewFinder($files, []); $finder->addNamespace('AriNode', __DIR__ . '/../AriNode/resources/views');
     $views = new Factory($resolver, $finder, $events); $views->setContainer($container);
 
+    Capsule::schema()->create('v2_plugins', function ($table) {
+        $table->increments('id'); $table->string('code')->unique();
+        $table->boolean('is_enabled')->default(true); $table->text('config')->nullable();
+    });
+    Plugin::create(['code' => 'ari_node', 'config' => '{"original":"keep-me"}']);
     Capsule::schema()->create('v2_server_machine', function ($table) {
         $table->increments('id'); $table->string('name'); $table->text('notes')->nullable();
         $table->string('token'); $table->boolean('is_active')->default(true); $table->integer('last_seen_at')->nullable();
@@ -118,10 +132,13 @@ namespace {
         $table->integer('server_port')->default(12000); $table->text('custom_route_rules')->nullable();
     });
     require __DIR__ . '/../AriNode/Services/Deployment.php';
+    require __DIR__ . '/../AriNode/Services/DeploymentSettings.php';
     require __DIR__ . '/../AriNode/Controllers/AdminController.php';
     require __DIR__ . '/../AriNode/Controllers/BackendUpdateController.php';
     require __DIR__ . '/../AriNode/Controllers/ConfigController.php';
     require __DIR__ . '/../AriNode/Controllers/EnrollmentController.php';
+    require __DIR__ . '/../AriNode/Controllers/SettingsController.php';
+    require __DIR__ . '/../AriNode/Controllers/ProvisionController.php';
     require __DIR__ . '/../AriNode/routes/api.php';
     require __DIR__ . '/../AriNode/routes/web.php';
     $routes = [];
@@ -140,6 +157,9 @@ namespace {
     $backendRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/backend-update');
     check(count($backendRoutes) === 2, 'Backend update needs separate GET and POST routes');
     foreach ($backendRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected backend update route'); }
+    $settingsRoutes = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v1/arinode/admin/settings');
+    check(count($settingsRoutes) === 2, 'API settings need GET and POST routes');
+    foreach ($settingsRoutes as $route) { check(in_array('admin', $route->gatherMiddleware(), true), 'Unprotected API settings route'); }
     $testAdminPath = '';
     require __DIR__ . '/../AriNode/routes/api.php';
     $emptyPath = array_filter($router->getRoutes()->getRoutes(), fn($route) => $route->uri() === 'api/v2/plugin/ari-node/servers/fetch');
@@ -196,6 +216,58 @@ namespace {
     check($enrollment->enroll(req(['code'=>$code . 'a']))->getStatusCode() === 403, 'Tampered enrollment accepted');
     check(str_contains($command, "sub'\"'\"'path'"), 'Panel URL was not shell quoted');
     rejects(fn() => $controller->command(req(['id'=>$id,'core'=>'xray'])), ValidationException::class);
+
+    $settings = new SettingsController();
+    $provision = new ProvisionController();
+    $defaults = data($settings->show(req()))['data'];
+    check($defaults['api_url'] === '' && $defaults['effective_url'] === "https://panel.example.com/sub'path", 'Unset API setting changed the legacy URL');
+    $apiAddress = 'https://api.example.net:8443/xboard';
+    $updated = data($settings->save(req(['api_url'=>'  HTTPS://API.EXAMPLE.NET:8443/xboard///  '])))['data'];
+    check($updated['api_url'] === $apiAddress && $updated['effective_url'] === $apiAddress, 'Configured API URL was not normalized or persisted');
+    $values = json_decode(Plugin::where('code', 'ari_node')->value('config'), true);
+    check($values['original'] === 'keep-me', 'Saving API URL overwrote other plugin settings');
+    $splitCommand = data($controller->command(req(['id'=>$id])))['data'];
+    check($splitCommand['api_url'] === $apiAddress && str_contains($splitCommand['command'], "--enroll '" . $apiAddress . "'"), 'Standalone deployment did not use backend API URL');
+    check(!str_contains($splitCommand['command'], 'panel.example.com'), 'Frontend site URL leaked into split deployment');
+    check(data($enrollment->enroll(req(['code'=>$codeFrom($splitCommand['command'])])))['token'] === $machine->token, 'Backend URL command broke enrollment');
+    $splitRows = data($controller->servers(req()))['data'];
+    foreach ($splitRows as $row) {
+        check(str_contains($row['install_command'], "--enroll '" . $apiAddress . "'"), 'Native CRUD deployment ignored API setting');
+    }
+    $provisionPayload = ['node_ids'=>[1,2], 'machine_id'=>$id];
+    $export = data($provision->provision(req($provisionPayload)));
+    check(count($export['Nodes']) === 2 && $export['Nodes'][0]['ApiHost'] === $apiAddress && $export['Nodes'][1]['ApiHost'] === $apiAddress, 'JSON provisioning ignored API setting');
+    check(Deployment::normalizePanelUrl('https://[2001:db8::1]:8443/panel/') === 'https://[2001:db8::1]:8443/panel', 'IPv6 API URL rejected');
+    foreach (['http://api.example.net', 'https://user:password@api.example.net', 'javascript:alert(1)',
+        'https://api.example.net?token=secret', 'https://api.example.net#section', 'https://api.example.net:0',
+        'https://api.example.net:65536', "https://api.example.net/a\nb", 'https://api.example.net/path\\other',
+        'https://api.example.net/api/v1', 'https://api.example.net/api', 'https://bad host', '//api.example.net'] as $invalid) {
+        rejects(fn() => $settings->save(req(['api_url'=>$invalid])), ValidationException::class);
+        check(data($settings->show(req()))['data']['api_url'] === $apiAddress, 'Invalid API URL replaced saved value');
+    }
+    rejects(fn() => $settings->save(req(['api_url'=>[]])), ValidationException::class);
+    rejects(fn() => $settings->save(req()), ValidationException::class);
+    $settings->disabled = true;
+    rejects(fn() => $settings->show(req()), HttpException::class);
+    rejects(fn() => $settings->save(req(['api_url'=>''])), HttpException::class);
+    $settings->disabled = false;
+    // Native plugin settings writes must affect existing controllers immediately,
+    // including when Octane keeps an already-constructed controller in memory.
+    Plugin::where('code', 'ari_node')->update(['config'=>'{"api_url":"https://api-second.example.net"}']);
+    check(data($controller->command(req(['id'=>$id])))['data']['api_url'] === 'https://api-second.example.net', 'Native settings change used stale worker configuration');
+    Plugin::where('code', 'ari_node')->update(['config'=>'{"api_url":"https://api.example.net/api/v1"}']);
+    check(data($settings->show(req()))['data']['warning'] !== null, 'Invalid native API setting was hidden');
+    rejects(fn() => $controller->command(req(['id'=>$id])), ValidationException::class);
+    check($provision->provision(req($provisionPayload))->getStatusCode() === 422, 'Invalid native setting exported a broken ApiHost');
+    $settings->save(req(['api_url'=>'']));
+    check(data($settings->show(req()))['data']['effective_url'] === "https://panel.example.com/sub'path", 'Clearing API setting did not restore site URL fallback');
+    $testAppUrl = '';
+    $originRequest = Request::create('https://backend.example.org/test', 'GET');
+    check(data($settings->show($originRequest))['data']['effective_url'] === 'https://backend.example.org', 'Missing site URL did not use the request origin');
+    $testAppUrl = 'http://legacy.example.org';
+    check(data($provision->provision(req($provisionPayload)))['Nodes'][0]['ApiHost'] === $testAppUrl, 'Legacy HTTP provisioning stopped working');
+    rejects(fn() => $controller->command(req(['id'=>$id])), ValidationException::class);
+    unset($testAppUrl);
 
     $count = ServerMachine::count();
     foreach ([['name'=>'Conflict','node_ids'=>[3]],['name'=>'Unknown','node_ids'=>[999]],['name'=>'Unsupported','node_ids'=>[4]],
@@ -318,6 +390,10 @@ SH
     check(str_contains($html->getContent(),'保存并生成部署命令') && !str_contains($html->getContent(),$machine->token), 'Rendered page is broken or exposes token before authentication');
     check(str_contains($html->headers->get('Content-Security-Policy'),"connect-src 'self'") && $html->headers->get('Cache-Control') === 'no-store, private', 'Page cache/CSP headers incorrect');
     check(!str_contains($html->getContent(),'@include'), 'Blade partials did not compile');
+    check(str_contains($html->getContent(), 'id="settings-api-url"') && str_contains($html->getContent(), 'id="open-settings"'), 'API communication setting is missing from the page');
+    $metadata = json_decode(file_get_contents(__DIR__ . '/../AriNode/config.json'), true);
+    check(($metadata['config']['api_url']['default'] ?? null) === '', 'Native plugin API setting is missing');
+    check(str_contains($html->getContent(), '<span class="version">' . $metadata['version'] . '</span>'), 'UI and plugin versions disagree');
     if ($target = getenv('ARINODE_TEST_RENDER')) { file_put_contents($target,$html->getContent()); }
     $files->deleteDirectory($cache);
     echo "XBoard admin regression tests passed (real validation, SQLite, routes and Blade)\n";

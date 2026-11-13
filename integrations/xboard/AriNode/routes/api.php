@@ -8,10 +8,13 @@ use Plugin\AriNode\Controllers\UpdateController;
 use Plugin\AriNode\Controllers\ConfigController;
 use Plugin\AriNode\Controllers\EnrollmentController;
 use Plugin\AriNode\Controllers\BackendUpdateController;
+use Plugin\AriNode\Controllers\SettingsController;
 
 Route::middleware('throttle:30,1')->post('/api/v1/arinode/enroll', [EnrollmentController::class, 'enroll']);
 
 Route::middleware('admin')->group(function () {
+    Route::get('/api/v1/arinode/admin/settings', [SettingsController::class, 'show']);
+    Route::post('/api/v1/arinode/admin/settings', [SettingsController::class, 'save']);
     Route::get('/api/v1/arinode/admin/update', [UpdateController::class, 'check']);
     Route::post('/api/v1/arinode/admin/update', [UpdateController::class, 'install']);
     Route::get('/api/v1/arinode/admin/backend-update', [BackendUpdateController::class, 'status']);

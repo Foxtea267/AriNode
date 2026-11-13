@@ -47,7 +47,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:6px 0 22px; }
 h1 { margin:0 0 6px; font-size:28px; line-height:1.2; letter-spacing:-.035em; font-weight:700; }
 .heading p,.auth p { margin:0; color:var(--ui-muted); font-size:12px; }
-.heading-actions { display:flex; gap:8px; flex:none; }
+.heading-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; flex:none; }
 .update-versions { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px; }
 .update-versions span { display:block; color:var(--ui-muted); font-size:12px; }
 .update-versions strong { display:block; margin-top:6px; font-size:22px; font-weight:650; }

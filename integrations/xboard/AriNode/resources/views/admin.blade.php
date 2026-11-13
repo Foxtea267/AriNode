@@ -11,7 +11,7 @@
 </head>
 <body>
 <header class="topbar">
-    <div class="brand">AriNode <span class="version">0.6.0</span></div>
+    <div class="brand">AriNode <span class="version">0.9.0</span></div>
     <div class="topbar-tools"><button id="theme-toggle" class="theme-toggle" type="button" aria-label="切换主题"></button></div>
 </header>
 <main class="shell">
@@ -22,7 +22,7 @@
     </section>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
     <section id="workspace" hidden>
-        <div class="heading"><div><h1>服务器管理</h1><p>管理服务器、节点绑定与部署命令。</p></div><div class="heading-actions"><button id="open-update" class="button subtle" type="button">插件更新</button><button id="refresh" class="button subtle" type="button">刷新</button><button id="new-server" class="button" type="button"><span aria-hidden="true">＋</span> 添加服务器</button></div></div>
+        <div class="heading"><div><h1>服务器管理</h1><p>管理服务器、节点绑定与部署命令。</p></div><div class="heading-actions"><button id="open-settings" class="button subtle" type="button">通讯设置</button><button id="open-update" class="button subtle" type="button">插件更新</button><button id="refresh" class="button subtle" type="button">刷新</button><button id="new-server" class="button" type="button"><span aria-hidden="true">＋</span> 添加服务器</button></div></div>
         <section class="stats" aria-label="服务器概览">
             <div class="stat"><span>服务器总数</span><strong id="stat-servers">—</strong><small>按当前名称搜索结果统计</small></div>
             <div class="stat"><span>可用节点</span><strong id="stat-nodes">—</strong><small>已启用且受 AriNode 支持</small></div>
@@ -42,6 +42,18 @@
         <p class="page-note">绑定变更会由已部署的 AriNode 自动同步。机器上报时间不能替代代理连接测试。</p>
     </section>
 </main>
+<dialog id="settings-dialog" aria-labelledby="settings-title">
+    <div class="dialog-heading"><div><h2 id="settings-title">通讯设置</h2><p>设置节点连接 XBoard 后端的地址。</p></div><button id="close-settings" class="icon-button" type="button" aria-label="关闭通讯设置">×</button></div>
+    <form id="settings-form">
+        <div class="dialog-body">
+            <div class="field"><label for="settings-api-url">API 通讯地址</label><input id="settings-api-url" type="url" maxlength="2048" placeholder="https://api.example.com" autocomplete="off" spellcheck="false" aria-describedby="settings-url-help"><p id="settings-url-help" class="field-help">填写节点可访问的 HTTPS 后端根地址，可带端口和部署子路径。不要附加 /api 或 /api/v1。留空使用站点 URL，未设置站点 URL 时使用当前请求域名。</p></div>
+            <p id="settings-effective" class="field-help" role="status" aria-live="polite"></p>
+            <p id="settings-error" class="form-error" role="alert" hidden></p>
+            <div class="deployment-note">保存后生成的部署命令和导出配置使用此地址。已有 VPS 更换地址时，先用 anctl panel list 找到旧绑定，再用 anctl panel remove 移除，最后执行新命令重新注册。对应节点会短暂中断。</div>
+        </div>
+        <div class="dialog-footer"><button id="cancel-settings" class="button subtle" type="button">取消</button><button id="save-settings" class="button" type="submit" disabled>保存</button></div>
+    </form>
+</dialog>
 <dialog id="server-dialog" aria-labelledby="form-title">
     <div class="dialog-heading"><div><h2 id="form-title">添加服务器</h2><p>可先部署服务器，再绑定节点。</p></div><button id="close-server" class="icon-button" type="button" aria-label="关闭服务器编辑">×</button></div>
     <form id="server-form">
@@ -64,7 +76,7 @@
             <div class="field"><label><input id="deploy-multi-panel" type="checkbox" checked> 多面板模式</label><p class="field-help">允许在已有面板的机器上追加绑定。</p></div>
         </div>
         <div class="terminal"><div class="terminal-heading"><span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>bash</span><span class="terminal-label">部署命令</span></div><label class="sr-only" for="deploy-command">部署命令</label><textarea id="deploy-command" class="command" rows="7" readonly spellcheck="false"></textarea></div>
-        <p id="command-status" class="field-help" role="status"></p><p id="deploy-error" class="form-error" role="alert" hidden></p>
+        <p id="deploy-api-url" class="field-help"></p><p id="command-status" class="field-help" role="status"></p><p id="deploy-error" class="form-error" role="alert" hidden></p>
         <div class="deployment-note">注册码有效期 30 分钟。节点配置由 AriNode 注册后拉取。查看或移除本机绑定可用 <code>anctl panel list</code> 和 <code>anctl panel remove</code>。</div>
     </div>
     <div class="dialog-footer"><button id="done-deployment" class="button subtle" type="button">完成</button><button id="copy-command" class="button" type="button" disabled>复制命令</button></div>

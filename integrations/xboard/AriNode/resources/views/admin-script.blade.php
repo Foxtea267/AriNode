@@ -5,6 +5,7 @@
     let commandRequest = 0, saving = false;
     let updateInfo = null, checkingUpdate = false, installingUpdate = false, updateRequest = 0;
     let backendServer = null, backendRequest = 0, backendTimer = 0, queuingBackend = false;
+    let settingsRequest = 0, savingSettings = false;
     const selected = new Set();
     function notice(message, error = false) {
         $('notice').textContent = message; $('notice').hidden = !message;
@@ -23,7 +24,7 @@
         if (!response.ok) {
             if (response.status === 401 || response.status === 403) {
                 $('auth').hidden = false; $('workspace').hidden = true;
-                $('server-dialog').close(); $('deployment').close(); $('plugin-update').close(); $('backend-update').close(); invalidateCommand();
+                $('server-dialog').close(); $('deployment').close(); $('plugin-update').close(); $('backend-update').close(); $('settings-dialog').close(); invalidateCommand();
             }
             throw new Error(Object.values(data.errors || {}).flat().join('；') || data.message || '请求失败（' + response.status + '）');
         }
@@ -115,6 +116,7 @@
     }
     function invalidateCommand() {
         commandRequest++; $('deploy-command').value = ''; $('copy-command').disabled = true;
+        $('deploy-api-url').textContent = '';
         $('command-status').textContent = ''; errorAt('deploy-error');
     }
     async function openEditor(server) {
@@ -148,6 +150,7 @@
             const response = await api('command', {id: server.id, core: $('deploy-core').value, multi_node: $('deploy-multi-node').checked, multi_panel: $('deploy-multi-panel').checked});
             if (request !== commandRequest || !$('deployment').open) return;
             $('deploy-command').value = response.data.command; $('copy-command').disabled = false;
+            $('deploy-api-url').textContent = 'API 通讯地址 ' + response.data.api_url;
             $('command-status').textContent = '命令已就绪';
         } catch (e) {
             if (request !== commandRequest) return;
@@ -158,6 +161,52 @@
         if (!token) { $('auth').hidden = false; $('workspace').hidden = true; return; }
         await loadNodes(); await loadServers(); $('auth').hidden = true; $('workspace').hidden = false; notice('');
     }
+    function showSettings(data) {
+        $('settings-api-url').value = data.api_url;
+        $('settings-effective').textContent = data.effective_url ? '当前生效地址 ' + data.effective_url : '';
+        errorAt('settings-error', data.warning || '');
+    }
+    $('open-settings').addEventListener('click', async () => {
+        const request = ++settingsRequest;
+        $('settings-api-url').value = ''; $('settings-api-url').disabled = true;
+        $('save-settings').disabled = true; errorAt('settings-error');
+        $('settings-effective').textContent = '正在读取通讯地址…';
+        $('settings-dialog').showModal();
+        try {
+            const response = await api('settings');
+            if (request !== settingsRequest || !$('settings-dialog').open) return;
+            showSettings(response.data);
+            $('settings-api-url').disabled = false; $('save-settings').disabled = false;
+            $('settings-api-url').focus();
+        } catch (e) {
+            if (request === settingsRequest) {
+                $('settings-effective').textContent = ''; errorAt('settings-error', e.message);
+            }
+        }
+    });
+    $('settings-form').addEventListener('submit', async event => {
+        event.preventDefault();
+        if (savingSettings || $('save-settings').disabled) return;
+        savingSettings = true; errorAt('settings-error');
+        const request = ++settingsRequest;
+        for (const id of ['save-settings', 'close-settings', 'cancel-settings', 'settings-api-url']) $(id).disabled = true;
+        try {
+            const response = await api('settings', {api_url: $('settings-api-url').value.trim()});
+            if (request !== settingsRequest || !$('settings-dialog').open) return;
+            showSettings(response.data); invalidateCommand();
+            $('settings-dialog').close(); notice('API 通讯地址已保存。');
+            await loadServers();
+        } catch (e) {
+            if ($('settings-dialog').open) errorAt('settings-error', e.message);
+            else notice(e.message, true);
+        } finally {
+            savingSettings = false;
+            for (const id of ['save-settings', 'close-settings', 'cancel-settings', 'settings-api-url']) $(id).disabled = false;
+        }
+    });
+    for (const id of ['close-settings', 'cancel-settings']) $(id).addEventListener('click', () => { if (!savingSettings) $('settings-dialog').close(); });
+    $('settings-dialog').addEventListener('cancel', event => { if (savingSettings) event.preventDefault(); });
+    $('settings-dialog').addEventListener('close', () => { settingsRequest++; });
     function tab(name, focus = false) {
         for (const item of ['servers', 'nodes']) {
             const active = item === name, control = $('tab-' + item);

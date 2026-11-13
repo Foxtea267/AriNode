@@ -40,13 +40,34 @@ final class Deployment
         return "'" . str_replace("'", "'\"'\"'", $value) . "'";
     }
 
-    public static function command(string $panel, string $token, int $machineId, iterable $servers, string $core = 'sing', bool $multiNode = true, bool $multiPanel = true): string
+    public static function normalizePanelUrl(string $panel, bool $requireHttps = true): string
     {
+        $panel = trim($panel);
+        if (preg_match('/[\x00-\x20\x7f\\\\]/', $panel)) {
+            throw new InvalidArgumentException('API 通讯地址不能包含空白、控制字符或反斜杠。');
+        }
         $panel = rtrim($panel, '/');
         $url = parse_url($panel);
-        if (!$url || ($url['scheme'] ?? '') !== 'https' || empty($url['host']) || isset($url['user']) || isset($url['pass']) || isset($url['query']) || isset($url['fragment'])) {
-            throw new InvalidArgumentException('Panel enrollment requires an HTTPS address without credentials, query or fragment');
+        $scheme = strtolower($url['scheme'] ?? '');
+        $schemes = $requireHttps ? ['https'] : ['http', 'https'];
+        if (!$url || !in_array($scheme, $schemes, true) || empty($url['host']) || isset($url['user']) || isset($url['pass']) || isset($url['query']) || isset($url['fragment']) || (isset($url['port']) && $url['port'] < 1)) {
+            throw new InvalidArgumentException('API 通讯地址必须是完整的 ' . ($requireHttps ? 'HTTPS' : 'HTTP(S)') . ' 地址，且不能包含账号、密码、查询参数或片段。');
         }
+        if (preg_match('~/api(?:/v[0-9]+)?$~i', $url['path'] ?? '')) {
+            throw new InvalidArgumentException('请填写 API 服务根地址，例如 https://api.example.com，不要附加 /api 或 /api/v1。');
+        }
+        $host = strtolower($url['host']);
+        $hostname = trim($host, '[]');
+        if (!filter_var($hostname, FILTER_VALIDATE_IP)
+            && !filter_var($hostname, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)) {
+            throw new InvalidArgumentException('API 通讯地址中的主机名无效。');
+        }
+        return $scheme . '://' . $host . (isset($url['port']) ? ':' . $url['port'] : '') . ($url['path'] ?? '');
+    }
+
+    public static function command(string $panel, string $token, int $machineId, iterable $servers, string $core = 'sing', bool $multiNode = true, bool $multiPanel = true): string
+    {
+        $panel = self::normalizePanelUrl($panel);
         if ($token === '' || strpbrk($token, "\0\r\n") !== false || $machineId <= 0) {
             throw new InvalidArgumentException('Machine token and a positive machine ID are required');
         }

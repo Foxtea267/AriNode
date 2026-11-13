@@ -2,7 +2,7 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.8.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.9.0** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
 
 ## 配置自动下发
 
@@ -43,6 +43,26 @@ https://你的面板域名/arinode/admin
 页面自动读取官方新版后台的 `XBOARD_ACCESS_TOKEN` 登录记录并检查有效期。旧版 / 定制后台存储方式不同，可临时填入管理员 Authorization 凭证；它仅留在当前页面内存中。普通用户或未登录访客无法读取服务器、节点或部署命令，也无法修改绑定。公开 HTML 外壳不含密钥或服务器资料。
 
 ## 添加服务器
+
+### API 通讯地址
+
+前后端分离部署时，在内置管理页右上角点击 **通讯设置**，填写 **API 通讯地址** 并保存。XBoard 原生插件配置中也提供相同字段。设置保存在 `v2_plugins.config` 的 `api_url`，生成新命令时立即读取。
+
+填写节点可访问的后端 HTTPS 根地址，例如 `https://api.example.com`，支持 `https://api.example.com:8443/xboard` 这样的端口和部署子路径。请填写服务根地址，不要附加 `/api` 或 `/api/v1`。地址中不能含账号、密码、查询参数或片段。
+
+取址优先级为显式 `api_url`、站点设置 `app_url`、当前请求域名。留空会恢复后两级取址。内置页面的部署命令、XBoard 原生插件服务器列表中的 `install_command` 和 `POST /api/v1/arinode/provision` 返回的 `ApiHost` 使用同一地址。节点用该地址兑换注册码，并持续拉取绑定和配置。
+
+已有 VPS 更换地址时，先在插件中保存新地址并生成新命令，然后在 VPS 执行以下步骤。移除旧绑定会停止对应节点，重新注册完成前会有短暂中断。
+
+```sh
+sudo anctl panel list
+sudo anctl panel remove OLD_BINDING_ID
+# 执行插件使用新 API 地址生成的部署命令
+```
+
+面板地址参与本机绑定标识。已有 VPS 需要重新注册才能使用新地址，旧地址绑定应在注册前移除，以免同一机器被重复发现。其他面板的绑定可继续使用各自的地址。
+
+### 注册机器
 
 1. 在 AriNode 管理页点击 **添加服务器**，填写名称和备注。节点可以留空，部署后再回面板绑定。
 2. 点击 **保存并生成部署命令**，选择内核和模式。默认使用 sing-box。HY1/HY2/TUIC/AnyTLS/Mieru 使用 sing-box。
@@ -86,10 +106,14 @@ sudo anctl panel remove <绑定ID>
 | --- | --- | --- |
 | GET | `/api/v1/arinode/admin/servers` | 分页服务器列表和默认部署命令 |
 | GET | `/api/v1/arinode/admin/nodes` | 可绑定节点、安全字段、归属信息 |
+| GET | `/api/v1/arinode/admin/settings` | API 通讯地址及当前生效地址 |
+| POST | `/api/v1/arinode/admin/settings` | 保存 `api_url`，空字符串恢复默认取址 |
 | POST | `/api/v1/arinode/admin/servers/save` | 新增 / 编辑服务器及节点绑定 |
 | POST | `/api/v1/arinode/admin/command` | 按机器 ID、内核和语言生成命令 |
 
 保存时允许 `node_ids: []`。生成命令可传 `{"id":3,"core":"sing","multi_node":true,"multi_panel":true}`。这两项均使用原生 `admin` 中间件认证。注册接口 `POST /api/v1/arinode/enroll` 接收签名注册码，并检查有效期、机器启用状态和凭据是否已轮换。
+
+通讯设置接口使用相同的 `admin` 认证。保存可传 `{"api_url":"https://api.example.com"}`，读取会返回已保存的 `api_url` 与 `effective_url`。
 
 ## 验证
 

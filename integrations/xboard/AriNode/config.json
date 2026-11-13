@@ -1,11 +1,19 @@
 {
   "name": "AriNode 服务器管理",
   "code": "ari_node",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "服务器管理、节点绑定、配置自动下发与热更新、一键部署和插件在线更新；页面：/arinode/admin",
   "author": "AriNode",
   "type": "feature",
-  "config": {},
+  "config": {
+    "api_url": {
+      "type": "string",
+      "default": "",
+      "label": "API 通讯地址",
+      "placeholder": "https://api.example.com",
+      "description": "节点可访问的 XBoard 后端 HTTPS 根地址，可带端口和部署子路径。不要附加 /api 或 /api/v1。用于部署命令和配置导出。留空使用站点 URL，未设置站点 URL 时使用当前请求域名。已有 VPS 修改地址后需重新注册绑定。"
+    }
+  },
   "admin_menus": [
     {"id":"entry","title":"管理页面","path":"entry","icon":"server","description":"打开 AriNode 独立管理页面，支持服务器表格、节点目录与一键部署。"},
     {"id":"servers","title":"服务器与部署命令","path":"servers","icon":"server","description":"添加服务器并绑定已有节点，保存后显示 AriNode 部署命令。带复制按钮的可视化页面位于 /arinode/admin。"},

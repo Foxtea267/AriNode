@@ -28,6 +28,14 @@ namespace App\Http\Controllers {
     }
 }
 namespace App\Models {
+    class Plugin {
+        public static function query() {
+            return new class {
+                public function where($field, $value) { return $this; }
+                public function first() { return null; }
+            };
+        }
+    }
     class Server {
         public int $id = 7;
         public bool $enabled = true;
@@ -129,6 +137,7 @@ namespace {
 
     require __DIR__ . '/../AriNode/Services/ClusterState.php';
     require __DIR__ . '/../AriNode/Services/Deployment.php';
+    require __DIR__ . '/../AriNode/Services/DeploymentSettings.php';
     require __DIR__ . '/../AriNode/Controllers/ClusterController.php';
     require __DIR__ . '/../AriNode/Controllers/ProvisionController.php';
     require __DIR__ . '/../AriNode/routes/api.php';
