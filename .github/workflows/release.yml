@@ -12,7 +12,9 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pin the browser test OS: ubuntu-latest can move ahead of Playwright's
+    # supported distributions and fail before running any application tests.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
