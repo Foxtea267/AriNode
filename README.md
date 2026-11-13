@@ -58,7 +58,7 @@ To run the native binary under systemd, run `sudo install -m 755 arinode anctl /
 
 ## Stable releases and upgrades
 
-Official stable versions are named `YYYYMMDD-commit`, for example `20261001-abcdef12`. The date is the UTC date of the release commit and the suffix is its abbreviated Git hash. Development builds report `dev`. To publish a stable version, a maintainer can start **Test and release AriNode** from GitHub Actions with **Run workflow** on `main`, or push a matching tag for a commit already on `main`. The workflow tests and publishes Linux `amd64` and `arm64` archives containing both executables and a `SHA256SUMS` file. Only a published, non-prerelease GitHub Release with this version format is eligible for upgrades.
+Official stable versions are named `YYYYMMDD-commit`, for example `20261001-abcdef12`. The date is the UTC date of the release commit and the suffix is its abbreviated Git hash. Development builds report `dev`. Every push to `main` runs **Test and release AriNode** and automatically publishes a stable release after tests pass. Maintainers can also use **Run workflow** on `main` or push a matching tag for a commit already on `main`; repeating the same version verifies its stable release and complete asset list without publishing it twice. The workflow publishes Linux `amd64` and `arm64` archives containing both executables, both plugin ZIPs and `SHA256SUMS`. Only a published, non-prerelease GitHub Release with this version format is eligible for upgrades.
 
 For a native Linux systemd installation:
 
