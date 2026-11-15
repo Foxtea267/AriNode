@@ -331,7 +331,7 @@ func TestPanelRestyTLSClientReuseAndConcurrentRequests(t *testing.T) {
 	server := startPanelTLSServer(t, func() *tls.Certificate { return active.Load() }, &requests)
 	client := newTLSPanelRestyClient(t, server.URL, tlsTestRoots(authority.rootX2))
 	for i := 0; i < 4; i++ {
-		if err := panelTLSRequest(client); err != nil {
+		if err := panelTLSRequest(client, 60); err != nil {
 			t.Fatalf("reused client request %d failed: %v", i, err)
 		}
 	}
@@ -356,6 +356,11 @@ func TestPanelRestyTLSClientReuseAndConcurrentRequests(t *testing.T) {
 			active.Store(&leaf)
 			expectedSerial = 60
 		}
+		// CloseIdleConnections alone can miss speculative parallel dials
+		// that have already negotiated the old leaf but are still finishing
+		// the handshake. Retire all accepted fixture sockets between cycles,
+		// while still exercising reuse within each new certificate generation.
+		server.CloseClientConnections()
 		client.client.GetClient().CloseIdleConnections()
 		start := make(chan struct{})
 		errs := make(chan error, concurrent+1)
