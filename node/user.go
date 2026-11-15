@@ -1,12 +1,19 @@
 package node
 
 import (
+	"sort"
+	"time"
+
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/common/sysstatus"
 	log "github.com/sirupsen/logrus"
 )
 
 func (c *Controller) reportUserTrafficTask() (err error) {
+	// The scheduler serializes normal invocations. Also protect an explicit
+	// overlapping invocation from sending/clearing the same pending snapshot.
+	c.userReportMu.Lock()
+	defer c.userReportMu.Unlock()
 	if c.apiClient.Cluster != nil {
 		return c.reportClusterTask()
 	}
@@ -20,18 +27,29 @@ func (c *Controller) reportUserTrafficTask() (err error) {
 			}
 		}
 	}
-	userTraffic, _ := c.server.GetUserTrafficSlice(c.tag, true)
-	if len(userTraffic) > 0 {
-		err = c.apiClient.ReportUserTraffic(userTraffic)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"tag": c.tag,
-				"err": err,
-			}).Info("Report user traffic failed")
-		} else {
-			log.WithField("tag", c.tag).Infof("Report %d users traffic", len(userTraffic))
-			log.WithField("tag", c.tag).Debugf("User traffic: %+v", userTraffic)
+	userTraffic, readErr := c.server.GetUserTrafficSlice(c.tag, true)
+	if readErr != nil {
+		log.WithError(readErr).WithField("tag", c.tag).Warn("Read user traffic failed; retained pending report")
+		userTraffic = nil
+	}
+	if len(userTraffic) > 0 && c.pendingUserTraffic == nil {
+		c.pendingUserTraffic = make(map[int]panel.UserTraffic)
+	}
+	// Merge only fresh bytes. Replaying a pending request must never add its
+	// own bytes again or count them as new online/dynamic-limit activity.
+	for _, traffic := range userTraffic {
+		pending := c.pendingUserTraffic[traffic.UID]
+		pending.UID = traffic.UID
+		pending.Upload += traffic.Upload
+		pending.Download += traffic.Download
+		c.pendingUserTraffic[traffic.UID] = pending
+	}
+	if err := c.sendPendingUserTraffic(); err != nil {
+		entry := log.WithError(err).WithField("tag", c.tag)
+		if c.userTrafficReport != nil {
+			entry = entry.WithField("report_id", c.userTrafficReport.ReportID)
 		}
+		entry.Warn("Report user traffic failed; retained for retry")
 	}
 
 	if err := c.reportOnlineDevices(userTraffic); err != nil {
@@ -39,6 +57,57 @@ func (c *Controller) reportUserTrafficTask() (err error) {
 	}
 
 	userTraffic = nil
+	return nil
+}
+
+func (c *Controller) sendPendingUserTraffic() error {
+	// A failed keyed upload may already have been queued by the panel.
+	// Never downgrade it to the additive native endpoint.
+	if c.userTrafficReport == nil {
+		if len(c.pendingUserTraffic) == 0 {
+			return nil
+		}
+		if !c.userTrafficLegacyPending && !c.userTrafficReceiptSupport && !time.Now().Before(c.userTrafficLegacyUntil) {
+			ok, err := c.apiClient.TrafficReceipts()
+			if err != nil {
+				return err
+			}
+			c.userTrafficReceiptSupport = ok
+			c.userTrafficLegacyUntil = time.Now().Add(5 * time.Minute)
+		}
+		rows := make([]panel.UserTraffic, 0, len(c.pendingUserTraffic))
+		for _, traffic := range c.pendingUserTraffic {
+			rows = append(rows, traffic)
+		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].UID < rows[j].UID })
+		if c.userTrafficLegacyPending || !c.userTrafficReceiptSupport {
+			// Pre-existing compatibility path: the stock endpoint does
+			// not provide a way to distinguish lost ACK from a failed write.
+			c.userTrafficLegacyPending = true
+			if err := c.apiClient.ReportUserTraffic(rows); err != nil {
+				return err
+			}
+			c.userTrafficLegacyPending = false
+			c.pendingUserTraffic = nil
+			log.WithField("tag", c.tag).Infof("Report %d users traffic (native)", len(rows))
+			return nil
+		}
+		rows = rows[:min(len(rows), 100000)]
+		report, err := panel.NewTrafficReport(rows)
+		if err != nil {
+			return err
+		}
+		c.userTrafficReport = report
+		for _, row := range rows {
+			delete(c.pendingUserTraffic, row.UID)
+		}
+	}
+	report := c.userTrafficReport
+	if err := c.apiClient.ReportTrafficWithReceipt(report); err != nil {
+		return err
+	}
+	c.userTrafficReport = nil
+	log.WithField("tag", c.tag).Infof("Report %d users traffic (acknowledged)", len(report.Traffic))
 	return nil
 }
 

@@ -194,12 +194,17 @@ func TestUnavailableNodeRetriesWithoutRestartingHealthyNode(t *testing.T) {
 	if n.Snapshot()[0].State != "retrying" || n.Snapshot()[1].State != "running" {
 		t.Fatalf("wrong initial states: %+v", n.Snapshot())
 	}
+	n.mu.Lock()
 	healthyController := n.entries[1].controller
+	n.mu.Unlock()
 	recovered.Store(true)
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if n.Snapshot()[0].State == "running" {
-			if n.entries[1].controller != healthyController {
+			n.mu.Lock()
+			unchanged := len(n.entries) > 1 && n.entries[1].controller == healthyController
+			n.mu.Unlock()
+			if !unchanged {
 				t.Fatal("healthy node restarted during retry")
 			}
 			return

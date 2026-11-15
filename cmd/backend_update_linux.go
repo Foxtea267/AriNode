@@ -67,7 +67,7 @@ func startBackendUpdates(cfg *conf.Conf, path, listen string) (func(*conf.Conf),
 				job, err := panel.BackendUpdate(ctx, binding, panel.BackendUpdateRequest{Action: "poll", Agent: agent, Version: version})
 				if err != nil {
 					if !errors.Is(err, panel.ErrUpdateJobUnavailable) {
-						log.WithField("panel", binding.APIHost).WithError(err).Debug("Panel backend update poll failed")
+						log.WithField("panel", panel.SafePanelAddress(binding.APIHost)).WithError(err).Debug("Panel backend update poll failed")
 					}
 					continue
 				}

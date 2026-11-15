@@ -38,16 +38,23 @@ var errSniffingTimeout = errors.New("timeout on sniffing")
 
 type cachedReader struct {
 	sync.Mutex
-	reader buf.TimeoutReader
-	cache  buf.MultiBuffer
+	reader      buf.TimeoutReader
+	cache       buf.MultiBuffer
+	interrupted bool
 }
 
 func (r *cachedReader) Cache(b *buf.Buffer, deadline time.Duration) error {
 	mb, err := r.reader.ReadMultiBufferTimeout(deadline)
 	if err != nil {
+		buf.ReleaseMulti(mb)
 		return err
 	}
 	r.Lock()
+	if r.interrupted {
+		r.Unlock()
+		buf.ReleaseMulti(mb)
+		return errors.New("sniffing interrupted")
+	}
 	if !mb.IsEmpty() {
 		r.cache, _ = buf.MergeMulti(r.cache, mb)
 	}
@@ -92,13 +99,12 @@ func (r *cachedReader) ReadMultiBufferTimeout(timeout time.Duration) (buf.MultiB
 
 func (r *cachedReader) Interrupt() {
 	r.Lock()
+	r.interrupted = true
 	if r.cache != nil {
 		r.cache = buf.ReleaseMulti(r.cache)
 	}
 	r.Unlock()
-	if p, ok := r.reader.(*pipe.Reader); ok {
-		p.Interrupt()
-	}
+	common.Interrupt(r.reader)
 }
 
 // DefaultDispatcher is a default implementation of Dispatcher.
@@ -149,7 +155,10 @@ func (*DefaultDispatcher) Start() error {
 }
 
 // Close implements common.Closable.
-func (*DefaultDispatcher) Close() error { return nil }
+func (d *DefaultDispatcher) Close() error {
+	d.closeAllLinks()
+	return nil
+}
 
 func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network) (*transport.Link, *transport.Link, *limiter.Limiter, error) {
 	opt := pipe.OptionsFromContext(ctx)
@@ -164,6 +173,9 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network) (*
 	outboundLink := &transport.Link{
 		Reader: uplinkReader,
 		Writer: downlinkWriter,
+	}
+	if content := session.ContentFromContext(ctx); content != nil && content.SniffingRequest.Enabled {
+		outboundLink.Reader = &cachedReader{reader: uplinkReader}
 	}
 
 	sessionInbound := session.InboundFromContext(ctx)
@@ -190,60 +202,40 @@ func (d *DefaultDispatcher) getLink(ctx context.Context, network net.Network) (*
 			network == net.Network_TCP,
 			sessionInbound.Source.Network == net.Network_TCP)
 		if reject {
-			errors.LogInfo(ctx, "Limited ", user.Email, " by conn or ip")
+			errors.LogInfo(ctx, "user limited by connection or IP policy")
 			common.Close(outboundLink.Writer)
 			common.Close(inboundLink.Writer)
 			common.Interrupt(outboundLink.Reader)
 			common.Interrupt(inboundLink.Reader)
-			return nil, nil, nil, errors.New("Limited ", user.Email, " by conn or ip")
+			return nil, nil, nil, errors.New("user limited by connection or IP policy")
 		}
-		var lm *LinkManager
-		if lmloaded, ok := d.LinkManagers.Load(user.Email); !ok {
-			lm = &LinkManager{
-				links: make(map[*ManagedWriter]buf.Reader),
+		managed := &ManagedWriter{}
+		ip := sessionInbound.Source.Address.IP().String()
+		downWriter := &deviceWriter{writer: downlinkWriter}
+		upWriter := &deviceWriter{writer: uplinkWriter}
+		managed.writer = upWriter
+		managed.abort = func() {
+			common.Interrupt(downWriter)
+			common.Interrupt(downlinkReader)
+			if sessionInbound.Conn != nil {
+				common.Close(sessionInbound.Conn)
 			}
-			d.LinkManagers.Store(user.Email, lm)
-		} else {
-			lm = lmloaded.(*LinkManager)
 		}
-		managedWriter := &ManagedWriter{
-			writer:  &deviceWriter{writer: uplinkWriter, release: limit.TrackDeviceIP(user.Email, sessionInbound.Source.Address.IP().String())},
-			manager: lm,
-			abort: func() {
-				common.Close(outboundLink.Writer)
-				common.Close(downlinkWriter)
-				common.Interrupt(downlinkReader)
-				if sessionInbound.Conn != nil {
-					common.Close(sessionInbound.Conn)
-				}
-			},
-		}
-		lm.AddLink(managedWriter, outboundLink.Reader)
-		inboundLink.Writer = managedWriter
-		outboundLink.Writer = &deviceWriter{writer: outboundLink.Writer, release: limit.TrackDeviceIP(user.Email, sessionInbound.Source.Address.IP().String())}
-		if w != nil {
-			sessionInbound.CanSpliceCopy = 3
-			inboundLink.Writer = rate.NewRateLimitWriter(inboundLink.Writer, w)
-			outboundLink.Writer = rate.NewRateLimitWriter(outboundLink.Writer, w)
-		}
-		var t *counter.TrafficCounter
-		if c, ok := d.Counter.Load(sessionInbound.Tag); !ok {
-			t = counter.NewTrafficCounter()
-			d.Counter.Store(sessionInbound.Tag, t)
-		} else {
-			t = c.(*counter.TrafficCounter)
-		}
-
-		ts := t.GetCounter(user.Email)
-		upcounter := &counter.XrayTrafficCounter{V: &ts.UpCounter}
-		downcounter := &counter.XrayTrafficCounter{V: &ts.DownCounter}
-		inboundLink.Writer = &dispatcher.SizeStatWriter{
-			Counter: upcounter,
-			Writer:  inboundLink.Writer,
-		}
-		outboundLink.Writer = &dispatcher.SizeStatWriter{
-			Counter: downcounter,
-			Writer:  outboundLink.Writer,
+		if !d.registerLink(sessionInbound.Tag, user, managed, outboundLink.Reader, func(ts *counter.TrafficStorage) {
+			upWriter.release = managed.trackHalf(limit.TrackDeviceIP(user.Email, ip))
+			downWriter.release = managed.trackHalf(limit.TrackDeviceIP(user.Email, ip))
+			inboundLink.Writer, outboundLink.Writer = managed, downWriter
+			if w != nil {
+				sessionInbound.CanSpliceCopy = 3
+				inboundLink.Writer = rate.NewRateLimitWriter(inboundLink.Writer, w)
+				outboundLink.Writer = rate.NewRateLimitWriter(outboundLink.Writer, w)
+			}
+			inboundLink.Writer = &dispatcher.SizeStatWriter{Counter: ts.XrayUplink(), Writer: inboundLink.Writer}
+			outboundLink.Writer = &dispatcher.SizeStatWriter{Counter: ts.XrayDownlink(), Writer: outboundLink.Writer}
+		}) {
+			common.Interrupt(uplinkReader)
+			common.Interrupt(downlinkReader)
+			return nil, nil, nil, errors.New("user authorization withdrawn")
 		}
 	}
 
@@ -322,10 +314,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 		go d.routedDispatch(ctx, outbound, destination, l, "")
 	} else {
 		go func() {
-			cReader := &cachedReader{
-				reader: outbound.Reader.(*pipe.Reader),
-			}
-			outbound.Reader = cReader
+			cReader := outbound.Reader.(*cachedReader)
 			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
 			if err == nil {
 				content.Protocol = result.Protocol()
@@ -395,53 +384,45 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			destination.Network == net.Network_TCP,
 			sessionInbound.Source.Network == net.Network_TCP)
 		if reject {
-			errors.LogInfo(ctx, "Limited ", user.Email, " by conn or ip")
+			errors.LogInfo(ctx, "user limited by connection or IP policy")
 			common.Close(outbound.Writer)
 			common.Interrupt(outbound.Reader)
-			return errors.New("Limited ", user.Email, " by conn or ip")
+			return errors.New("user limited by connection or IP policy")
 		}
-		var lm *LinkManager
-		if lmloaded, ok := d.LinkManagers.Load(user.Email); !ok {
-			lm = &LinkManager{
-				links: make(map[*ManagedWriter]buf.Reader),
+		rawReader, rawWriter := outbound.Reader, outbound.Writer
+		ip := sessionInbound.Source.Address.IP().String()
+		managed := &ManagedWriter{}
+		writer := &deviceWriter{writer: rawWriter}
+		timed, ok := rawReader.(buf.TimeoutReader)
+		if !ok {
+			timed = &buf.TimeoutWrapperReader{Reader: rawReader}
+		}
+		reader := &CounterReader{Reader: timed, Source: rawReader, Bucket: w}
+		managed.writer = writer
+		managed.abort = func() {
+			if sessionInbound.Conn != nil {
+				common.Close(sessionInbound.Conn)
 			}
-			d.LinkManagers.Store(user.Email, lm)
-		} else {
-			lm = lmloaded.(*LinkManager)
 		}
-		managedWriter := &ManagedWriter{
-			writer:  &deviceWriter{writer: outbound.Writer, release: limit.TrackDeviceIP(user.Email, sessionInbound.Source.Address.IP().String())},
-			manager: lm,
-			abort: func() {
-				if sessionInbound.Conn != nil {
-					common.Close(sessionInbound.Conn)
-				}
-			},
+		var upstream buf.Reader = reader
+		if content.SniffingRequest.Enabled {
+			upstream = &cachedReader{reader: reader}
 		}
-		outbound.Writer = managedWriter
-		if w != nil {
-			sessionInbound.CanSpliceCopy = 3
-			outbound.Writer = rate.NewRateLimitWriter(outbound.Writer, w)
-		}
-		var t *counter.TrafficCounter
-		if c, ok := d.Counter.Load(sessionInbound.Tag); !ok {
-			t = counter.NewTrafficCounter()
-			d.Counter.Store(sessionInbound.Tag, t)
-		} else {
-			t = c.(*counter.TrafficCounter)
-		}
-
-		ts := t.GetCounter(user.Email)
-		downcounter := &counter.XrayTrafficCounter{V: &ts.DownCounter}
-		outbound.Reader = &CounterReader{
-			Reader:  &buf.TimeoutWrapperReader{Reader: outbound.Reader},
-			Counter: &ts.UpCounter,
-			Release: limit.TrackDeviceIP(user.Email, sessionInbound.Source.Address.IP().String()),
-		}
-		lm.AddLink(managedWriter, outbound.Reader)
-		outbound.Writer = &dispatcher.SizeStatWriter{
-			Counter: downcounter,
-			Writer:  outbound.Writer,
+		if !d.registerLink(sessionInbound.Tag, user, managed, upstream, func(ts *counter.TrafficStorage) {
+			writer.release = managed.trackHalf(limit.TrackDeviceIP(user.Email, ip))
+			reader.Release = managed.trackHalf(limit.TrackDeviceIP(user.Email, ip))
+			reader.Add = ts.AddUp
+			outbound.Reader = upstream
+			outbound.Writer = managed
+			if w != nil {
+				sessionInbound.CanSpliceCopy = 3
+				outbound.Writer = rate.NewRateLimitWriter(outbound.Writer, w)
+			}
+			outbound.Writer = &dispatcher.SizeStatWriter{Counter: ts.XrayDownlink(), Writer: outbound.Writer}
+		}) {
+			common.Close(rawWriter)
+			common.Interrupt(rawReader)
+			return errors.New("user authorization withdrawn")
 		}
 	}
 
@@ -449,10 +430,15 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 	if !sniffingRequest.Enabled {
 		d.routedDispatch(ctx, outbound, destination, limit, "")
 	} else {
-		cReader := &cachedReader{
-			reader: outbound.Reader.(buf.TimeoutReader),
+		cReader, ok := outbound.Reader.(*cachedReader)
+		if !ok {
+			timed, ok := outbound.Reader.(buf.TimeoutReader)
+			if !ok {
+				timed = &buf.TimeoutWrapperReader{Reader: outbound.Reader}
+			}
+			cReader = &cachedReader{reader: timed}
+			outbound.Reader = cReader
 		}
-		outbound.Reader = cReader
 		result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
 		if err == nil {
 			content.Protocol = result.Protocol()

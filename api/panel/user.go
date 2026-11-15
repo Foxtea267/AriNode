@@ -2,9 +2,9 @@ package panel
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 
 	"github.com/vmihailenco/msgpack/v5"
@@ -44,10 +44,10 @@ func (c *Client) GetUserList() ([]UserInfo, error) {
 		SetDoNotParseResponse(true).
 		Get(path)
 	if err != nil {
-		return nil, err
+		return nil, panelRequestError(path, err)
 	}
 	if r == nil || r.RawResponse == nil {
-		return nil, fmt.Errorf("received nil response or raw response")
+		return nil, fmt.Errorf("panel request %s returned no response body", safeEndpoint(path))
 	}
 	defer r.RawResponse.Body.Close()
 
@@ -62,48 +62,40 @@ func (c *Client) GetUserList() ([]UserInfo, error) {
 	if strings.Contains(r.Header().Get("Content-Type"), "application/x-msgpack") {
 		decoder := msgpack.NewDecoder(r.RawResponse.Body)
 		if err := decoder.Decode(userlist); err != nil {
-			return nil, fmt.Errorf("decode user list error: %w", err)
+			return nil, fmt.Errorf("decode user list error: invalid msgpack response")
+		}
+		if _, err := decoder.PeekCode(); err != io.EOF {
+			return nil, fmt.Errorf("decode user list error: trailing msgpack data")
 		}
 	} else {
-		dec := jsontext.NewDecoder(r.RawResponse.Body)
-		for {
-			tok, err := dec.ReadToken()
-			if err != nil {
-				return nil, fmt.Errorf("decode user list error: %w", err)
-			}
-			if tok.Kind() == '"' && tok.String() == "users" {
-				break
-			}
+		if err := json.UnmarshalRead(r.RawResponse.Body, userlist); err != nil {
+			return nil, fmt.Errorf("decode user list error: invalid JSON response")
 		}
-		tok, err := dec.ReadToken()
-		if err != nil {
-			return nil, fmt.Errorf("decode user list error: %w", err)
+	}
+	// Only an explicit empty list revokes everyone. An error envelope or a
+	// truncated body must never be applied as an authoritative snapshot.
+	if userlist.Users == nil {
+		return nil, fmt.Errorf("decode user list error: missing users array")
+	}
+	seen := make(map[string]struct{}, len(userlist.Users))
+	for _, user := range userlist.Users {
+		if user.Id <= 0 || strings.TrimSpace(user.Uuid) == "" || user.SpeedLimit < 0 || user.DeviceLimit < 0 {
+			return nil, fmt.Errorf("decode user list error: invalid user record")
 		}
-		if tok.Kind() != '[' {
-			return nil, fmt.Errorf(`decode user list error: expected "users" array`)
+		if _, duplicate := seen[user.Uuid]; duplicate {
+			return nil, fmt.Errorf("decode user list error: duplicate user credential")
 		}
-		for dec.PeekKind() != ']' {
-			val, err := dec.ReadValue()
-			if err != nil {
-				return nil, fmt.Errorf("decode user list error: read user object: %w", err)
-			}
-			var u UserInfo
-			if err := json.Unmarshal(val, &u); err != nil {
-				return nil, fmt.Errorf("decode user list error: unmarshal user error: %w", err)
-			}
-			userlist.Users = append(userlist.Users, u)
-		}
+		seen[user.Uuid] = struct{}{}
 	}
 	c.userEtag = r.Header().Get("ETag")
-	if userlist.Users == nil {
-		userlist.Users = []UserInfo{}
-	}
 	return userlist.Users, nil
 }
 
 // GetUserAlive will fetch the alive_ip count for users
 func (c *Client) GetUserAlive() (map[int]int, error) {
-	c.AliveMap = &AliveMap{}
+	// Publish only a complete successful snapshot. A transport/TLS error must
+	// not clear the last valid device-limit state while other APIs are down.
+	alive := &AliveMap{}
 	path := c.endpoint("alivelist")
 	if c.Cluster != nil {
 		path = clusterBase + "alivelist"
@@ -111,36 +103,46 @@ func (c *Client) GetUserAlive() (map[int]int, error) {
 	r, err := c.client.R().
 		ForceContentType("application/json").
 		Get(path)
-	if err != nil || r == nil || r.StatusCode() >= 399 {
+	if err != nil {
 		if c.Cluster != nil {
 			return nil, fmt.Errorf("cluster alive list is unavailable")
 		}
-		c.AliveMap.Alive = make(map[int]int)
-		return c.AliveMap.Alive, nil
+		return nil, panelRequestError(path, err)
 	}
-	if err := json.Unmarshal(r.Body(), c.AliveMap); err != nil {
+	if r == nil || r.StatusCode() >= 399 {
 		if c.Cluster != nil {
-			return nil, fmt.Errorf("decode cluster alive list: %w", err)
+			return nil, fmt.Errorf("cluster alive list is unavailable")
 		}
-		fmt.Printf("unmarshal user alive list error: %s", err)
-		c.AliveMap.Alive = make(map[int]int)
+		if r == nil {
+			return nil, fmt.Errorf("panel request %s failed: empty response", safeEndpoint(path))
+		}
+		// Some legacy panels have no native device-count endpoint. Preserve
+		// their cold-start behavior only for an explicitly missing API; never
+		// replace a previously published snapshot or hide TLS/auth failures.
+		if (r.StatusCode() == 404 || r.StatusCode() == 405) && (c.AliveMap == nil || c.AliveMap.Alive == nil) {
+			return map[int]int{}, nil
+		}
+		return nil, fmt.Errorf("panel request %s failed: HTTP %d", safeEndpoint(path), r.StatusCode())
 	}
-	if c.Cluster != nil && (c.AliveMap.Alive == nil || c.AliveMap.IPs == nil) {
+	if err := json.Unmarshal(r.Body(), alive); err != nil {
+		return nil, fmt.Errorf("panel request %s failed: invalid alive list", safeEndpoint(path))
+	}
+	if c.Cluster != nil && (alive.Alive == nil || alive.IPs == nil) {
 		return nil, fmt.Errorf("cluster alive list is missing required fields")
 	}
 
-	c.AliveIPs = c.AliveMap.IPs
 	// Native XBoard returns only a count. The optional plugin endpoint adds
 	// identities so a known client can move to another replica at its limit.
-	if c.Cluster == nil && c.AliveMap.IPs == nil && len(c.AliveMap.Alive) > 0 {
+	if c.Cluster == nil && alive.IPs == nil && len(alive.Alive) > 0 {
 		if rich, err := c.client.R().Get("/api/v1/arinode/devices/alivelist"); err == nil && rich != nil && rich.StatusCode() == 200 {
 			var devices AliveMap
 			if json.Unmarshal(rich.Body(), &devices) == nil && devices.Alive != nil && devices.IPs != nil {
-				c.AliveMap = &devices
-				c.AliveIPs = devices.IPs
+				alive = &devices
 			}
 		}
 	}
+	c.AliveMap = alive
+	c.AliveIPs = alive.IPs
 	return c.AliveMap.Alive, nil
 }
 
@@ -154,7 +156,13 @@ type UserTraffic struct {
 func (c *Client) ReportUserTraffic(userTraffic []UserTraffic) error {
 	data := make(map[int][]int64, len(userTraffic))
 	for i := range userTraffic {
-		data[userTraffic[i].UID] = []int64{userTraffic[i].Upload, userTraffic[i].Download}
+		row := userTraffic[i]
+		if t := data[row.UID]; t != nil {
+			t[0] += row.Upload
+			t[1] += row.Download
+		} else {
+			data[row.UID] = []int64{row.Upload, row.Download}
+		}
 	}
 	path := c.endpoint("push")
 	r, err := c.client.R().

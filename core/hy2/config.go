@@ -409,14 +409,17 @@ func (n *Hysteria2node) getHyConfig(info *panel.NodeInfo, config *conf.Options, 
 	}
 	sniff, err := n.getRequestHook(c)
 	if err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 	Outbound, err := n.getOutboundConfig(c)
 	if err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 	Masq, err := n.getMasqHandler(tls, conn, c)
 	if err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 	return &server.Config{

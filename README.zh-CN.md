@@ -1,8 +1,16 @@
 # AriNode
 
+## HY1 与 VLESS 用户热更新修复
+
+默认 `sing` 内核的 Hysteria v1、VLESS 改用稳定认证代际，避免删用户后数组位置重排导致旧会话串号。VLESS 删除用户会关闭其父连接及 TCP/UDP 子连接，保留其他用户和节点，并将已产生与晚到计数按原 UID 排队上报。后续还覆盖了 VMess AEAD、Trojan、经典 Shadowsocks、Xray 连接登记和独立 Hysteria2 鉴权。[后续修复与范围](docs/user-revocation-followup.md)。原生 push 在 ACK 丢失时仍可能重复计费。[复现与测试边界](docs/hy1-vless-user-updates.md)。
+
+## HY2/TUIC 用户撤销与流量计数
+
+修复默认 `sing` 内核 HY2/TUIC 重置 UUID 后旧 QUIC 连接复用、HY2 活跃 UDP 撤销遗漏，以及 TUIC 删除活跃 UDP 用户时的连接类型异常。认证按不可复用的代际记录校验，保留健康用户连接。TCP 累计计数改为累加，流量读取改为原子取数清零；普通上报失败保留内存批次重试。原生面板没有报告幂等键，响应丢失时仍可能重复计费；面板失联也会延迟到期撤销。固定版 sing-quic 的 packet session 清理闭包另有未能动态 race 验证的池化 ID 风险，见[复现、修复范围与回归说明](docs/quic-revocation-accounting.md)。
+
 ## UDP 用户限速
 
-默认 `sing` 内核的普通 UDP 转发已补齐用户 `speed_limit`：同一节点用户的 TCP、UDP、上下行及并发连接共用现有桶，保留 Mbps 单位、设备限制、计费与撤销行为。无需增加出站或修改节点配置。包含 Mieru TCP/UDP 底层传输及 VLESS、SS、HY2、TUIC、AnyTLS 的真实限速回归。独立 `hysteria2` 内核和 Xray `DispatchLink` 另有限速缺口，详见[实现、测试和范围限制](docs/udp-rate-limit.md)。
+默认 `sing` 内核的普通 UDP 转发已补齐用户 `speed_limit`：同一节点用户的 TCP、UDP、上下行及并发连接共用现有桶，保留 Mbps 单位、设备限制、计费与撤销行为。无需增加出站或修改节点配置。包含 Mieru TCP/UDP 底层传输及 VLESS、SS、HY2、TUIC、AnyTLS 的真实限速回归。Xray 两种转发路径均已接入共享限速桶；独立 `hysteria2` 内核仍缺用户带宽限速，详见[实现、测试和范围限制](docs/udp-rate-limit.md)。
 
 ## 动态 SOCKS5 出站管理（DSOM）
 
@@ -48,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/Foxtea267/AriNode/main/scripts/inst
 
 ## XBoard 插件内置页面
 
-上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.9.2**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称，按需勾选节点并保存，即可复制一键安装命令，默认 sing-box。命令包含有效期 30 分钟的注册码，AriNode 注册后自动获取机器凭据、节点绑定和配置。
+上传并升级 [XBoard 插件](dist/arinode-xboard-plugin.zip) 至 **0.9.3**，启用后登录管理员后台，打开 `https://你的面板域名/arinode/admin`。页面采用风控插件同款的紧凑黑白风格，包含服务器表格、节点目录、编辑 / 部署弹窗、深浅色主题和手机布局。点击“添加服务器”，填写名称，按需勾选节点并保存，即可复制一键安装命令，默认 sing-box。命令包含有效期 30 分钟的注册码，AriNode 注册后自动获取机器凭据、节点绑定和配置。
 
 原生 **服务器与部署命令** 表格将命令列固定为 290px、部署提示列固定为 140px，每行提供 **复制命令** 按钮，复制内容为完整命令。注册码过期时提示刷新列表，浏览器拒绝自动复制时显示并选中完整命令，可按 Ctrl+C / ⌘C。由 Laravel 提供的 `secure_path` 管理页会自动加载此功能。独立静态后台可通过自身同源地址加载 `/arinode/native-table.css` 和带 `defer` 的 `/arinode/native-table.js`，或使用 `/arinode/admin`。自定义 CSP 需允许这些同源脚本和样式。[静态后台接入说明](docs/xboard-plugin.md#原生后台表格中的部署命令)。
 

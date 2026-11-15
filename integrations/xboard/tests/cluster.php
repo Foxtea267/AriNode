@@ -74,7 +74,11 @@ namespace App\Services {
     class ServerService {
         public static array $traffic = [];
         public static array $status = [];
-        public static function processTraffic($node, $data): void { self::$traffic[] = $data; }
+        public static bool $throwAfterTraffic = false;
+        public static function processTraffic($node, $data): void {
+            self::$traffic[] = $data;
+            if (self::$throwAfterTraffic) { throw new \RuntimeException('Simulated queue interruption', 500); }
+        }
         public static function processStatus($node, $data): void { self::$status = $data; }
         public static function touchNode($node): void {}
         public static function getAvailableUsers($node) { return new \TestCollection([['id'=>1], ['id'=>2], ['id'=>3]]); }
@@ -103,6 +107,7 @@ namespace {
     use Illuminate\Support\Facades\Route;
     use Plugin\AriNode\Controllers\ClusterController;
     use Plugin\AriNode\Controllers\ProvisionController;
+    use Plugin\AriNode\Controllers\TrafficController;
     use Plugin\AriNode\Services\ClusterState;
 
     final class TestCollection {
@@ -118,7 +123,10 @@ namespace {
         public array $data = [];
         public function get($key, $default = null) { return $this->data[$key] ?? $default; }
         public function has($key): bool { return array_key_exists($key, $this->data); }
-        public function put($key, $data, $ttl): void { $this->data[$key] = $data; }
+        public function put($key, $data, $ttl): bool { $this->data[$key] = $data; return true; }
+        public function add($key, $data, $ttl): bool {
+            return !$this->has($key) && $this->put($key, $data, $ttl);
+        }
         public function lock($key, $ttl) {
             return new class { public function block($wait, $callback) { return $callback(); } };
         }
@@ -140,11 +148,14 @@ namespace {
     require __DIR__ . '/../AriNode/Services/DeploymentSettings.php';
     require __DIR__ . '/../AriNode/Controllers/ClusterController.php';
     require __DIR__ . '/../AriNode/Controllers/ProvisionController.php';
+    require __DIR__ . '/../AriNode/Controllers/TrafficController.php';
     require __DIR__ . '/../AriNode/routes/api.php';
     check(Route::$routes['/api/v1/arinode/cluster/report'] === ['POST', 'server.v2'], 'Reports need native server authentication');
     check(Route::$routes['/api/v1/arinode/devices/alivelist'] === ['GET', 'server.v2'], 'Known IP identities need server authentication');
     check(Route::$routes['/api/v1/arinode/cluster/members'] === ['GET', 'admin'], 'Member inventory must require admin');
     check(Route::$routes['/api/v1/arinode/provision'] === ['POST', 'admin'], 'Provisioning must require admin');
+    check(Route::$routes['/api/v1/arinode/traffic/info'] === ['GET', 'server.v2'], 'Traffic negotiation requires node auth');
+    check(Route::$routes['/api/v1/arinode/traffic/report'] === ['POST', 'server.v2'], 'Traffic receipts require node auth');
 
     $testNode = new \App\Models\Server;
     $testStore = new TestStore;
@@ -163,6 +174,23 @@ namespace {
     check(ServerService::$status['cpu'] === 40.0 && ServerService::$status['mem']['total'] === 2000, 'Incorrect group load aggregation');
     $retry = $controller->report(new Request($a, $testNode))->data;
     check($retry['duplicate'] && count(ServerService::$traffic) === 2, 'A network retry charged the same snapshot twice');
+    $trafficController = new TrafficController;
+    check($trafficController->info(new Request([], $testNode))->data === ['version'=>1, 'node_id'=>7], 'Incorrect receipt capability');
+    rejects(fn() => $trafficController->info(new Request([])), 422);
+    $batch = ['report_id'=>time() . '-' . str_repeat('e', 32), 'traffic'=>[3=>[20,30], 1=>[300,512]]];
+    $trafficController->report(new Request($batch, $testNode)); // response intentionally discarded
+    $reordered = array_replace($batch, ['traffic'=>array_reverse($batch['traffic'], true)]);
+    $duplicate = $trafficController->report(new Request($reordered, $testNode))->data;
+    check($duplicate['duplicate'] && count(ServerService::$traffic) === 3, 'Lost receipt requeued native traffic');
+    rejects(fn() => $trafficController->report(new Request(array_replace($batch, ['traffic'=>[1=>[600,512]]]), $testNode)), 409);
+    $interrupted = array_replace($batch, ['report_id'=>time() . '-' . str_repeat('f', 32)]);
+    ServerService::$throwAfterTraffic = true;
+    rejects(fn() => $trafficController->report(new Request($interrupted, $testNode)), 500);
+    ServerService::$throwAfterTraffic = false;
+    rejects(fn() => $trafficController->report(new Request($interrupted, $testNode)), 409);
+    check(count(ServerService::$traffic) === 4, 'Partial queue failure retriggered an ambiguous report');
+    $expired = array_replace($batch, ['report_id'=>(time() - 604801) . '-' . str_repeat('e', 32)]);
+    rejects(fn() => $trafficController->report(new Request($expired, $testNode)), 422);
     check((array) $controller->alivelist(new Request([], $testNode))->data['alive'] === [1=>1,2=>1,3=>1], 'Retry rolled back another member');
     $empty = $report('hk-01', 'c', [], 0);
     $empty['traffic'] = [];

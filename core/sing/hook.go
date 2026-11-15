@@ -20,14 +20,32 @@ import (
 var _ adapter.ConnectionTracker = (*HookServer)(nil)
 
 type HookServer struct {
-	counter sync.Map //map[string]*counter.TrafficCounter
+	counter sync.Map // map[string]*counter.TrafficCounter
+}
+
+// Stable protocol adapters bind authorization and counter acquisition under
+// their own generation lock. A delayed routed callback cannot create a fresh
+// unreportable counter after its credential was revoked and re-added.
+type routedUserCounterKey struct{}
+type routedUserCounterLease func(*HookServer, string, string) (*counter.TrafficStorage, bool)
+
+func (h *HookServer) userCounter(tag, user string) *counter.TrafficStorage {
+	stored, _ := h.counter.LoadOrStore(tag, counter.NewTrafficCounter())
+	return stored.(*counter.TrafficCounter).GetCounter(user)
+}
+
+func (h *HookServer) routedCounter(ctx context.Context, tag, user string) (*counter.TrafficStorage, bool) {
+	if lease, ok := ctx.Value(routedUserCounterKey{}).(routedUserCounterLease); ok {
+		return lease(h, tag, user)
+	}
+	return h.userCounter(tag, user), true
 }
 
 func (h *HookServer) ModeList() []string {
 	return nil
 }
 
-func (h *HookServer) RoutedConnection(_ context.Context, conn net.Conn, m adapter.InboundContext, _ adapter.Rule, _ adapter.Outbound) net.Conn {
+func (h *HookServer) RoutedConnection(ctx context.Context, conn net.Conn, m adapter.InboundContext, _ adapter.Rule, _ adapter.Outbound) net.Conn {
 	l, err := limiter.GetLimiter(m.Inbound)
 	if err != nil {
 		log.Warn("get limiter for ", m.Inbound, " error: ", err)
@@ -37,7 +55,7 @@ func (h *HookServer) RoutedConnection(_ context.Context, conn net.Conn, m adapte
 	ip := m.Source.Addr.String()
 	if b, r := l.CheckLimit(taguuid, ip, true, true); r {
 		conn.Close()
-		log.Error("[", m.Inbound, "] ", "Limited ", m.User, " by ip or conn")
+		log.Error("[", m.Inbound, "] user limited by IP or connection policy")
 		return conn
 	} else if b != nil {
 		conn = rate.NewConnRateLimiter(conn, b)
@@ -47,8 +65,7 @@ func (h *HookServer) RoutedConnection(_ context.Context, conn net.Conn, m adapte
 		protocol := m.Protocol
 		if l.CheckDomainRule(destStr) {
 			log.Error(fmt.Sprintf(
-				"User %s access domain %s reject by rule",
-				m.User,
+				"Access to domain %s rejected by rule",
 				destStr))
 			conn.Close()
 			return conn
@@ -56,26 +73,23 @@ func (h *HookServer) RoutedConnection(_ context.Context, conn net.Conn, m adapte
 		if len(protocol) != 0 {
 			if l.CheckProtocolRule(protocol) {
 				log.Error(fmt.Sprintf(
-					"User %s access protocol %s reject by rule",
-					m.User,
+					"Access to protocol %s rejected by rule",
 					protocol))
 				conn.Close()
 				return conn
 			}
 		}
 	}
-	var t *counter.TrafficCounter
-	if c, ok := h.counter.Load(m.Inbound); !ok {
-		t = counter.NewTrafficCounter()
-		h.counter.Store(m.Inbound, t)
-	} else {
-		t = c.(*counter.TrafficCounter)
+	storage, allowed := h.routedCounter(ctx, m.Inbound, m.User)
+	if !allowed {
+		_ = conn.Close()
+		return conn
 	}
-	conn = counter.NewConnCounter(conn, t.GetCounter(m.User), l.TrackDeviceIP(taguuid, ip))
+	conn = counter.NewConnCounter(conn, storage, l.TrackDeviceIP(taguuid, ip))
 	return conn
 }
 
-func (h *HookServer) RoutedPacketConnection(_ context.Context, conn N.PacketConn, m adapter.InboundContext, _ adapter.Rule, _ adapter.Outbound) N.PacketConn {
+func (h *HookServer) RoutedPacketConnection(ctx context.Context, conn N.PacketConn, m adapter.InboundContext, _ adapter.Rule, _ adapter.Outbound) N.PacketConn {
 	l, err := limiter.GetLimiter(m.Inbound)
 	if err != nil {
 		log.Warn("get limiter for ", m.Inbound, " error: ", err)
@@ -85,7 +99,7 @@ func (h *HookServer) RoutedPacketConnection(_ context.Context, conn N.PacketConn
 	taguuid := format.UserTag(m.Inbound, m.User)
 	if b, r := l.CheckLimit(taguuid, ip, false, false); r {
 		conn.Close()
-		log.Error("[", m.Inbound, "] ", "Limited ", m.User, " by ip or conn")
+		log.Error("[", m.Inbound, "] user limited by IP or connection policy")
 		return conn
 	} else if b != nil {
 		conn = rate.NewPacketConnRateLimiter(conn, b)
@@ -95,8 +109,7 @@ func (h *HookServer) RoutedPacketConnection(_ context.Context, conn N.PacketConn
 		protocol := m.Destination.Network()
 		if l.CheckDomainRule(destStr) {
 			log.Error(fmt.Sprintf(
-				"User %s access domain %s reject by rule",
-				m.User,
+				"Access to domain %s rejected by rule",
 				destStr))
 			conn.Close()
 			return conn
@@ -104,21 +117,18 @@ func (h *HookServer) RoutedPacketConnection(_ context.Context, conn N.PacketConn
 		if len(protocol) != 0 {
 			if l.CheckProtocolRule(protocol) {
 				log.Error(fmt.Sprintf(
-					"User %s access protocol %s reject by rule",
-					m.User,
+					"Access to protocol %s rejected by rule",
 					protocol))
 				conn.Close()
 				return conn
 			}
 		}
 	}
-	var t *counter.TrafficCounter
-	if c, ok := h.counter.Load(m.Inbound); !ok {
-		t = counter.NewTrafficCounter()
-		h.counter.Store(m.Inbound, t)
-	} else {
-		t = c.(*counter.TrafficCounter)
+	storage, allowed := h.routedCounter(ctx, m.Inbound, m.User)
+	if !allowed {
+		_ = conn.Close()
+		return conn
 	}
-	conn = counter.NewPacketConnCounter(conn, t.GetCounter(m.User), l.TrackDeviceIP(taguuid, ip))
+	conn = counter.NewPacketConnCounter(conn, storage, l.TrackDeviceIP(taguuid, ip))
 	return conn
 }

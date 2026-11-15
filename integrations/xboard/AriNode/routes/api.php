@@ -9,6 +9,7 @@ use Plugin\AriNode\Controllers\ConfigController;
 use Plugin\AriNode\Controllers\EnrollmentController;
 use Plugin\AriNode\Controllers\BackendUpdateController;
 use Plugin\AriNode\Controllers\SettingsController;
+use Plugin\AriNode\Controllers\TrafficController;
 
 Route::middleware('throttle:30,1')->post('/api/v1/arinode/enroll', [EnrollmentController::class, 'enroll']);
 
@@ -38,6 +39,8 @@ Route::middleware('admin')->group(function () {
 Route::middleware('admin')->post('/api/v1/arinode/provision', [ProvisionController::class, 'provision']);
 Route::middleware('admin')->get('/api/v1/arinode/cluster/members', [ClusterController::class, 'members']);
 Route::middleware('server.v2')->group(function () {
+    Route::get('/api/v1/arinode/traffic/info', [TrafficController::class, 'info']);
+    Route::post('/api/v1/arinode/traffic/report', [TrafficController::class, 'report']);
     Route::post('/api/v1/arinode/backend-update', [BackendUpdateController::class, 'agent']);
     Route::get('/api/v1/arinode/node/config', [ConfigController::class, 'download']);
     Route::get('/api/v1/arinode/devices/alivelist', [ClusterController::class, 'devices']);

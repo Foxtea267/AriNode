@@ -12,6 +12,7 @@ import (
 )
 
 type Hysteria2node struct {
+	Auth          *V2bX
 	Hy2server     server.Server
 	Tag           string
 	Logger        *zap.Logger
@@ -20,6 +21,11 @@ type Hysteria2node struct {
 }
 
 func (h *Hysteria2) AddNode(tag string, info *panel.NodeInfo, config *conf.Options) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, exists := h.Hy2nodes[tag]; exists {
+		return fmt.Errorf("node already exists")
+	}
 	if info.RoutingEnabled() {
 		return fmt.Errorf("node %s: panel routing requires the sing-box core for hysteria2", tag)
 	}
@@ -36,16 +42,20 @@ func (h *Hysteria2) AddNode(tag string, info *panel.NodeInfo, config *conf.Optio
 			return fmt.Errorf("parse Hysteria2 server config: %w", err)
 		}
 	}
+	auth := &V2bX{tag: tag}
 	n := Hysteria2node{
+		Auth:   auth,
 		Tag:    tag,
 		Logger: h.Logger,
 		EventLogger: &serverLogger{
+			auth:   auth,
 			Tag:    tag,
 			logger: h.Logger,
 		},
 		TrafficLogger: &HookServer{
-			Tag:                   tag,
-			logger:                h.Logger,
+			auth: auth,
+			Tag:  tag,
+
 			ReportMinTrafficBytes: config.ReportMinTraffic * 1024,
 		},
 	}
@@ -54,9 +64,10 @@ func (h *Hysteria2) AddNode(tag string, info *panel.NodeInfo, config *conf.Optio
 	if err != nil {
 		return err
 	}
-	hyconfig.Authenticator = h.Auth
+	hyconfig.Authenticator = auth
 	s, err := server.NewServer(hyconfig)
 	if err != nil {
+		_ = hyconfig.Conn.Close()
 		return err
 	}
 	n.Hy2server = s
@@ -72,10 +83,13 @@ func (h *Hysteria2) AddNode(tag string, info *panel.NodeInfo, config *conf.Optio
 }
 
 func (h *Hysteria2) DelNode(tag string) error {
-	err := h.Hy2nodes[tag].Hy2server.Close()
-	if err != nil {
-		return err
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n, ok := h.Hy2nodes[tag]
+	if !ok {
+		return nil
 	}
+	n.Auth.close()
 	delete(h.Hy2nodes, tag)
-	return nil
+	return n.Hy2server.Close()
 }

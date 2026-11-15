@@ -35,7 +35,7 @@ func (n *Node) discoverBindingsLocked() []conf.NodeConfig {
 			bindings, err = p.GetMachineNodes()
 		}
 		if err != nil {
-			log.WithFields(log.Fields{"panel": template.ApiConfig.APIHost, "machine_id": template.ApiConfig.MachineID}).WithError(err).Warn("Machine discovery failed; preserving existing nodes")
+			log.WithFields(log.Fields{"panel": panel.SafePanelAddress(template.ApiConfig.APIHost), "machine_id": template.ApiConfig.MachineID}).WithError(err).Warn("Machine discovery failed; preserving existing nodes")
 			seen := map[string]bool{}
 			for _, c := range n.configured {
 				if c.ApiConfig.NodeID > 0 && c.ApiConfig.Cluster == nil && machineKey(c) == key {

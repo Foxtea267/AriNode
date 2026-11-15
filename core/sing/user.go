@@ -1,20 +1,13 @@
 package sing
 
 import (
-	"encoding/base64"
 	"errors"
 
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/common/counter"
+	"github.com/Foxtea267/AriNode/common/format"
 	"github.com/Foxtea267/AriNode/core"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/protocol/hysteria"
-	"github.com/sagernet/sing-box/protocol/hysteria2"
-	"github.com/sagernet/sing-box/protocol/shadowsocks"
-	"github.com/sagernet/sing-box/protocol/trojan"
-	"github.com/sagernet/sing-box/protocol/tuic"
-	"github.com/sagernet/sing-box/protocol/vless"
-	"github.com/sagernet/sing-box/protocol/vmess"
 )
 
 func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
@@ -39,7 +32,9 @@ func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
 				UUID: p.Users[i].Uuid,
 			}
 		}
-		err = in.(*vless.Inbound).AddUsers(us)
+		err = in.(interface {
+			AddUsers([]option.VLESSUser) error
+		}).AddUsers(us)
 	case "vmess":
 		us := make([]option.VMessUser, len(p.Users))
 		for i := range p.Users {
@@ -48,23 +43,33 @@ func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
 				UUID: p.Users[i].Uuid,
 			}
 		}
-		err = in.(*vmess.Inbound).AddUsers(us)
+		err = in.(interface {
+			AddUsers([]option.VMessUser) error
+		}).AddUsers(us)
 	case "shadowsocks":
 		us := make([]option.ShadowsocksUser, len(p.Users))
+		passwords := make(map[string]bool, len(p.Users))
 		for i := range p.Users {
-			var password = p.Users[i].Uuid
-			switch p.Shadowsocks.Cipher {
-			case "2022-blake3-aes-128-gcm":
-				password = base64.StdEncoding.EncodeToString([]byte(password[:16]))
-			case "2022-blake3-aes-256-gcm":
-				password = base64.StdEncoding.EncodeToString([]byte(password[:32]))
+			password, err := format.ShadowsocksUserPassword(p.Shadowsocks.Cipher, p.Users[i].Uuid)
+			if err != nil {
+				return 0, err
 			}
+			if passwords[password] {
+				return 0, errors.New("duplicate effective Shadowsocks user key")
+			}
+			passwords[password] = true
 			us[i] = option.ShadowsocksUser{
 				Name:     p.Users[i].Uuid,
 				Password: password,
 			}
 		}
-		err = in.(*shadowsocks.MultiInbound).AddUsers(us)
+		updater, ok := in.(interface {
+			AddUsers([]option.ShadowsocksUser) error
+		})
+		if !ok {
+			return 0, errors.New("Shadowsocks inbound does not support panel users")
+		}
+		err = updater.AddUsers(us)
 	case "trojan":
 		us := make([]option.TrojanUser, len(p.Users))
 		for i := range p.Users {
@@ -73,39 +78,13 @@ func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
 				Password: p.Users[i].Uuid,
 			}
 		}
-		err = in.(*trojan.Inbound).AddUsers(us)
+		err = in.(*stableTrojanInbound).AddUsers(us)
 	case "tuic":
-		us := make([]option.TUICUser, len(p.Users))
-		id := make([]int, len(p.Users))
-		for i := range p.Users {
-			us[i] = option.TUICUser{
-				Name:     p.Users[i].Uuid,
-				UUID:     p.Users[i].Uuid,
-				Password: p.Users[i].Uuid,
-			}
-			id[i] = p.Users[i].Id
-		}
-		err = in.(*tuic.Inbound).AddUsers(us, id)
+		err = addQUICUsers(in, p.Users)
 	case "hysteria":
-		us := make([]option.HysteriaUser, len(p.Users))
-		for i := range p.Users {
-			us[i] = option.HysteriaUser{
-				Name:       p.Users[i].Uuid,
-				AuthString: p.Users[i].Uuid,
-			}
-		}
-		err = in.(*hysteria.Inbound).AddUsers(us)
+		err = addQUICUsers(in, p.Users)
 	case "hysteria2":
-		us := make([]option.Hysteria2User, len(p.Users))
-		id := make([]int, len(p.Users))
-		for i := range p.Users {
-			us[i] = option.Hysteria2User{
-				Name:     p.Users[i].Uuid,
-				Password: p.Users[i].Uuid,
-			}
-			id[i] = p.Users[i].Id
-		}
-		err = in.(*hysteria2.Inbound).AddUsers(us, id)
+		err = addQUICUsers(in, p.Users)
 	case "anytls":
 		err = in.(*anyTLSInbound).AddUsers(p.Users)
 	default:
@@ -126,38 +105,49 @@ func (b *Sing) AddUsers(p *core.AddUsersParams) (added int, err error) {
 func (b *Sing) GetUserTraffic(tag, uuid string, reset bool) (up int64, down int64) {
 	if v, ok := b.hookServer.counter.Load(tag); ok {
 		c := v.(*counter.TrafficCounter)
-		up = c.GetUpCount(uuid)
-		down = c.GetDownCount(uuid)
-		if reset {
-			c.Reset(uuid)
-		}
-		return
+		return c.GetTraffic(uuid, reset)
 	}
 	return 0, 0
 }
 
 func (b *Sing) GetUserTrafficSlice(tag string, reset bool) ([]panel.UserTraffic, error) {
 	trafficSlice := make([]panel.UserTraffic, 0)
+	byUID := make(map[int]int)
+	appendTraffic := func(traffic panel.UserTraffic) {
+		if index, ok := byUID[traffic.UID]; ok {
+			trafficSlice[index].Upload += traffic.Upload
+			trafficSlice[index].Download += traffic.Download
+		} else {
+			byUID[traffic.UID] = len(trafficSlice)
+			trafficSlice = append(trafficSlice, traffic)
+		}
+	}
 	hook := b.hookServer
-	b.users.mapLock.RLock()
-	defer b.users.mapLock.RUnlock()
+	b.users.mapLock.Lock()
+	defer b.users.mapLock.Unlock()
+	if spool := b.users.retiredTraffic[tag]; spool != nil {
+		for _, traffic := range spool.Snapshot(reset) {
+			appendTraffic(panel.UserTraffic(traffic))
+		}
+	}
 	if v, ok := hook.counter.Load(tag); ok {
 		c := v.(*counter.TrafficCounter)
 		c.Counters.Range(func(key, value interface{}) bool {
 			uuid := key.(string)
 			traffic := value.(*counter.TrafficStorage)
-			up := traffic.UpCounter.Load()
-			down := traffic.DownCounter.Load()
+			up, down := traffic.Snapshot(false)
 			if up+down > b.nodeReportMinTrafficBytes[tag] {
 				if reset {
-					traffic.UpCounter.Store(0)
-					traffic.DownCounter.Store(0)
+					up, down = traffic.Snapshot(true)
+					if up+down == 0 {
+						return true
+					}
 				}
 				if b.users.uidMap[tag][uuid] == 0 {
 					c.Delete(uuid)
 					return true
 				}
-				trafficSlice = append(trafficSlice, panel.UserTraffic{
+				appendTraffic(panel.UserTraffic{
 					UID:      b.users.uidMap[tag][uuid],
 					Upload:   up,
 					Download: down,
@@ -170,7 +160,7 @@ func (b *Sing) GetUserTrafficSlice(tag string, reset bool) ([]panel.UserTraffic,
 		}
 		return trafficSlice, nil
 	}
-	return nil, nil
+	return trafficSlice, nil
 }
 
 type UserDeleter interface {
@@ -187,19 +177,23 @@ func (b *Sing) DelUsers(users []panel.UserInfo, tag string, info *panel.NodeInfo
 		case "mieru":
 			del = i.(*mieruInbound)
 		case "vmess":
-			del = i.(*vmess.Inbound)
+			del = i.(UserDeleter)
 		case "vless":
-			del = i.(*vless.Inbound)
+			del = i.(UserDeleter)
 		case "shadowsocks":
-			del = i.(*shadowsocks.MultiInbound)
+			var ok bool
+			del, ok = i.(UserDeleter)
+			if !ok {
+				return errors.New("Shadowsocks inbound does not support panel users")
+			}
 		case "trojan":
-			del = i.(*trojan.Inbound)
+			del = i.(*stableTrojanInbound)
 		case "tuic":
-			del = i.(*tuic.Inbound)
+			del = i.(UserDeleter)
 		case "hysteria":
-			del = i.(*hysteria.Inbound)
+			del = i.(UserDeleter)
 		case "hysteria2":
-			del = i.(*hysteria2.Inbound)
+			del = i.(UserDeleter)
 		case "anytls":
 			del = i.(*anyTLSInbound)
 		default:
@@ -217,9 +211,23 @@ func (b *Sing) DelUsers(users []panel.UserInfo, tag string, info *panel.NodeInfo
 	if err := del.DelUsers(uuids); err != nil {
 		return err
 	}
+	_, stableSS := del.(*stableShadowsocksInbound)
 	for i := range users {
 		if v, ok := b.hookServer.counter.Load(tag); ok {
 			c := v.(*counter.TrafficCounter)
+			if stored, ok := c.Counters.Load(users[i].Uuid); ok && (info.Type == "vless" || info.Type == "trojan" || info.Type == "vmess" || stableSS) {
+				uid := b.users.uidMap[tag][users[i].Uuid]
+				if uid != 0 {
+					if b.users.retiredTraffic == nil {
+						b.users.retiredTraffic = make(map[string]*counter.RetiredUserTraffic)
+					}
+					if b.users.retiredTraffic[tag] == nil {
+						b.users.retiredTraffic[tag] = &counter.RetiredUserTraffic{}
+					}
+					destination := b.users.retiredTraffic[tag]
+					stored.(*counter.TrafficStorage).RetireToFunc(func(up, down int64) { destination.Add(uid, up, down) })
+				}
+			}
 			c.Delete(users[i].Uuid)
 		}
 		delete(b.users.uidMap[tag], users[i].Uuid)

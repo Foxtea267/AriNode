@@ -2,7 +2,7 @@
 
 ## 安装 / 升级
 
-上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.9.2** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。
+上传 [arinode-xboard-plugin.zip](../dist/arinode-xboard-plugin.zip)，在 XBoard 插件管理中安装或升级到 **0.9.3** 并启用 `ari_node`，然后刷新后台。也可以把 `integrations/xboard/AriNode` 完整复制到 `<XBoard>/plugins/AriNode` 后执行面板的插件升级流程。配套新版节点可使用[流量批次回执](user-revocation-followup.md#流量批次如何处理丢回执)。
 
 ## 配置自动下发
 

@@ -8,7 +8,6 @@ import (
 
 	"github.com/Foxtea267/AriNode/api/panel"
 	"github.com/Foxtea267/AriNode/conf"
-	"github.com/Foxtea267/AriNode/core/xray/app/dispatcher"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/outbound"
@@ -59,7 +58,11 @@ func (c *Xray) AddNode(tag string, info *panel.NodeInfo, config *conf.Options) e
 }
 
 func (c *Xray) addInbound(config *core.InboundHandlerConfig) error {
-	rawHandler, err := core.CreateObject(c.Server, config)
+	settings, err := ss2022HandlerSettings(config)
+	if err != nil {
+		return err
+	}
+	rawHandler, err := core.CreateObject(c.Server, settings)
 	if err != nil {
 		return err
 	}
@@ -98,11 +101,10 @@ func (c *Xray) DelNode(tag string) error {
 	for user := range c.users.uidMap {
 		if strings.HasPrefix(user, tag+"|") {
 			delete(c.users.uidMap, user)
-			if v, ok := c.dispatcher.LinkManagers.LoadAndDelete(user); ok {
-				v.(*dispatcher.LinkManager).CloseAll()
-			}
+			c.dispatcher.RevokeUser(user)
 		}
 	}
+	delete(c.users.retired, tag)
 	c.users.mapLock.Unlock()
 	c.dispatcher.SetNodePolicy(tag, nil)
 	outErr := c.removeOutbound(tag)

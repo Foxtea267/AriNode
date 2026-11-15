@@ -25,8 +25,17 @@ jobs:
         run: GOEXPERIMENT=jsonv2 go test -p 2 -tags 'sing xray hysteria2 with_quic with_grpc with_utls with_wireguard with_acme with_gvisor' ./...
       - name: Check managers, device tracking, rate limiting and config watcher concurrency
         run: |
-          GOEXPERIMENT=jsonv2 go test -race -p 2 ./dsom ./conf ./limiter ./common/rate
+          GOEXPERIMENT=jsonv2 go test -race -p 2 ./dsom ./conf ./limiter ./common/rate ./common/counter
           GOEXPERIMENT=jsonv2 go test -race -p 2 ./core/sing -run '^(TestHookTCPAndPacketSessionsShareUserRateAndAccounting|TestHookConnectionsKeepSharedUserRateBucket|TestHookReleasesPacketSessionFromDeviceReports)$' -count=1 -timeout=120s
+          # Race-check the inbound state machine separately. Real QUIC UDP
+          # integration remains in the full test job; the pinned sing-quic SDK
+          # has an upstream pooled-message callback race outside this adapter.
+          GOEXPERIMENT=jsonv2 go test -race -p 2 -tags 'with_quic with_grpc' ./core/sing -run '^TestQUIC(AuthenticationGenerationAndNoopSnapshots|TracksTCPAndPacketCloseCallbacks|ConcurrentAuthenticationAndUserUpdates|SnapshotLifetimeAndNodeClose)$' -count=1 -timeout=120s
+          GOEXPERIMENT=jsonv2 go test -race -p 2 ./core/sing -run '^(TestVLESSStable|TestRetiredVLESS|TestVMessReplay|TestSS2022Replay)' -count=1 -timeout=120s
+          GOEXPERIMENT=jsonv2 go test -race -p 2 ./core/hy2 -run '^TestStandaloneRateSharedAndRevocationCancelsWait$' -count=1 -timeout=120s
+          GOEXPERIMENT=jsonv2 go test -race -p 2 ./core/xray/app/dispatcher -count=1 -timeout=120s
+          GOEXPERIMENT=jsonv2 go test -race -p 2 ./node -run '^Test(NativeTrafficReport|PluginTraffic)' -count=1 -timeout=120s
+          GOEXPERIMENT=jsonv2 go test -race -p 2 ./api/panel ./node -count=1 -timeout=240s
 
       - name: Validate installer shell syntax
         run: |

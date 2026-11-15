@@ -9,6 +9,7 @@ import (
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/log"
 
+	"github.com/Foxtea267/AriNode/common/counter"
 	"github.com/Foxtea267/AriNode/conf"
 	vCore "github.com/Foxtea267/AriNode/core"
 	box "github.com/sagernet/sing-box"
@@ -44,8 +45,9 @@ type Sing struct {
 }
 
 type UserMap struct {
-	uidMap  map[string]map[string]int // inbound tag -> UUID -> panel user ID
-	mapLock sync.RWMutex
+	uidMap         map[string]map[string]int              // inbound tag -> UUID -> panel user ID
+	retiredTraffic map[string]*counter.RetiredUserTraffic // last bytes after revoke, keyed by original panel UID
+	mapLock        sync.RWMutex
 }
 
 func init() {
@@ -55,8 +57,11 @@ func init() {
 func New(c *conf.CoreConfig) (vCore.Core, error) {
 	ctx := context.Background()
 	registry := include.InboundRegistry()
+	registerQUICInbounds(registry)
 	inbound.Register[option.VLESSInboundOptions](registry, "vless", newVLESSInbound)
 	inbound.Register[option.TrojanInboundOptions](registry, "trojan", newTrojanInbound)
+	inbound.Register[option.VMessInboundOptions](registry, "vmess", newStableVMessInbound)
+	inbound.Register[option.ShadowsocksInboundOptions](registry, "shadowsocks", newStableShadowsocksInbound)
 	inbound.Register[mieruInboundOptions](registry, "mieru", newMieruInbound)
 	inbound.Register[option.AnyTLSInboundOptions](registry, "anytls", newAnyTLSInbound)
 	outboundRegistry := include.OutboundRegistry()

@@ -92,3 +92,77 @@ func TestNativeDeviceLifecycleWithRealVLESSConnections(t *testing.T) {
 		})
 	}
 }
+
+func TestXrayActiveVLESSRevocationKeepsOriginalUIDTraffic(t *testing.T) {
+	cfg := conf.NewXrayConfig()
+	server, err := core.NewCore([]conf.CoreConfig{{Type: "xray", XrayConfig: cfg}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	const tag = "xray-revoke-live"
+	info := &panel.NodeInfo{Type: "vless", Common: &panel.CommonNode{ServerPort: policyPort(t)}, VAllss: &panel.VAllssNode{Network: "tcp"}}
+	opts := &conf.Options{Core: "xray", ListenIP: "127.0.0.1"}
+	if err := opts.UseCore("xray"); err != nil {
+		t.Fatal(err)
+	}
+	first := []panel.UserInfo{{Id: 41, Uuid: policyUUID}}
+	renewed := []panel.UserInfo{{Id: 82, Uuid: policyUUID}}
+	limiter.Init()
+	limit := limiter.AddLimiter(tag, &conf.LimitConfig{}, first, nil)
+	defer limiter.DeleteLimiter(tag)
+	if err := server.AddNode(tag, info, opts); err != nil {
+		t.Fatal(err)
+	}
+	defer server.DelNode(tag)
+	add := func(users []panel.UserInfo) {
+		t.Helper()
+		if _, err := server.AddUsers(&core.AddUsersParams{Tag: tag, NodeInfo: info, Users: users}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(first)
+	echo, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer echo.Close()
+	go func() {
+		for {
+			conn, err := echo.Accept()
+			if err != nil {
+				return
+			}
+			go func() { defer conn.Close(); _, _ = io.Copy(conn, conn) }()
+		}
+	}()
+	old := policyDial(t, info.Common.ServerPort, echo.Addr().String(), "ping")
+	defer old.Close()
+	if err := server.DelUsers(first, tag, info); err != nil {
+		t.Fatal(err)
+	}
+	limit.UpdateUser(tag, renewed, first)
+	add(renewed)
+	fresh := policyDial(t, info.Common.ServerPort, echo.Addr().String(), "ping")
+	defer fresh.Close()
+	_ = old.SetDeadline(time.Now().Add(time.Second))
+	_, _ = old.Write([]byte("ping"))
+	if _, err := io.ReadFull(old, make([]byte, 4)); err == nil {
+		t.Fatal("old VLESS connection still forwarded after re-add")
+	}
+	rows, err := server.GetUserTrafficSlice(tag, true)
+	got := make(map[int][2]int64)
+	for _, row := range rows {
+		got[row.UID] = [2]int64{row.Upload, row.Download}
+	}
+	if err != nil || len(rows) != 2 || got[41] != [2]int64{4, 4} || got[82] != [2]int64{4, 4} {
+		t.Fatalf("traffic lost or assigned to the new UID: %+v, %v", rows, err)
+	}
+	rows, err = server.GetUserTrafficSlice(tag, true)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("drained traffic reported twice: %+v, %v", rows, err)
+	}
+}

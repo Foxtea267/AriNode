@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Foxtea267/AriNode/api/panel"
@@ -17,10 +18,13 @@ var limitLock sync.RWMutex
 var limiter map[string]*Limiter
 
 func Init() {
+	limitLock.Lock()
+	defer limitLock.Unlock()
 	limiter = map[string]*Limiter{}
 }
 
 type Limiter struct {
+	userMu        sync.Mutex // serializes credential and speed bucket changes
 	aliveMu       sync.RWMutex
 	aliveIPs      map[int]map[string]bool
 	activeDevices map[string]map[string]*deviceSession
@@ -43,7 +47,7 @@ type UserLimitInfo struct {
 	DeviceLimit       int
 	DynamicSpeedLimit int
 	ExpireTime        int64
-	OverLimit         bool
+	OverLimit         atomic.Bool
 }
 
 func AddLimiter(tag string, l *conf.LimitConfig, users []panel.UserInfo, aliveList map[int]int) *Limiter {
@@ -67,7 +71,6 @@ func AddLimiter(tag string, l *conf.LimitConfig, users []panel.UserInfo, aliveLi
 		if users[i].DeviceLimit != 0 {
 			userLimit.DeviceLimit = users[i].DeviceLimit
 		}
-		userLimit.OverLimit = false
 		info.UserLimitInfo.Store(format.UserTag(tag, users[i].Uuid), userLimit)
 	}
 	info.UUIDtoUID = uuidmap
@@ -94,6 +97,8 @@ func DeleteLimiter(tag string) {
 }
 
 func (l *Limiter) UpdateUser(tag string, added []panel.UserInfo, deleted []panel.UserInfo) {
+	l.userMu.Lock()
+	defer l.userMu.Unlock()
 	for i := range deleted {
 		l.UserLimitInfo.Delete(format.UserTag(tag, deleted[i].Uuid))
 		l.UserOnlineIP.Delete(format.UserTag(tag, deleted[i].Uuid))
@@ -116,17 +121,21 @@ func (l *Limiter) UpdateUser(tag string, added []panel.UserInfo, deleted []panel
 		if added[i].DeviceLimit != 0 {
 			userLimit.DeviceLimit = added[i].DeviceLimit
 		}
-		userLimit.OverLimit = false
 		l.UserLimitInfo.Store(format.UserTag(tag, added[i].Uuid), userLimit)
+		l.SpeedLimiter.Delete(format.UserTag(tag, added[i].Uuid))
 		l.UUIDtoUID[added[i].Uuid] = added[i].Id
 	}
 }
 
 func (l *Limiter) UpdateDynamicSpeedLimit(tag, uuid string, limit int, expire time.Time) error {
-	if v, ok := l.UserLimitInfo.Load(format.UserTag(tag, uuid)); ok {
+	l.userMu.Lock()
+	defer l.userMu.Unlock()
+	key := format.UserTag(tag, uuid)
+	if v, ok := l.UserLimitInfo.Load(key); ok {
 		info := v.(*UserLimitInfo)
 		info.DynamicSpeedLimit = limit
 		info.ExpireTime = expire.Unix()
+		l.SpeedLimiter.Delete(key)
 	} else {
 		return errors.New("not found")
 	}
@@ -134,6 +143,8 @@ func (l *Limiter) UpdateDynamicSpeedLimit(tag, uuid string, limit int, expire ti
 }
 
 func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool) (Bucket *ratelimit.Bucket, Reject bool) {
+	l.userMu.Lock()
+	defer l.userMu.Unlock()
 	// check if ipv4 mapped ipv6
 	ip = canonicalDeviceIP(ip)
 
@@ -146,17 +157,12 @@ func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool
 		u := v.(*UserLimitInfo)
 		deviceLimit = u.DeviceLimit
 		uid = u.UID
-		if u.ExpireTime < time.Now().Unix() && u.ExpireTime != 0 {
-			if u.SpeedLimit != 0 {
-				userLimit = u.SpeedLimit
-				u.DynamicSpeedLimit = 0
-				u.ExpireTime = 0
-			} else {
-				l.UserLimitInfo.Delete(taguuid)
-			}
-		} else {
-			userLimit = determineSpeedLimit(u.SpeedLimit, u.DynamicSpeedLimit)
+		if u.ExpireTime != 0 && u.ExpireTime <= time.Now().Unix() {
+			u.DynamicSpeedLimit = 0
+			u.ExpireTime = 0
+			l.SpeedLimiter.Delete(taguuid)
 		}
+		userLimit = determineSpeedLimit(u.SpeedLimit, u.DynamicSpeedLimit)
 	} else {
 		return nil, true
 	}
@@ -168,13 +174,12 @@ func (l *Limiter) CheckLimit(taguuid string, ip string, isTcp bool, noSSUDP bool
 
 	limit := int64(determineSpeedLimit(nodeLimit, userLimit)) * 1000000 / 8 // If you need the Speed limit
 	if limit > 0 {
-		Bucket = ratelimit.NewBucketWithQuantum(time.Second, limit, limit) // Byte/s
-		if v, ok := l.SpeedLimiter.LoadOrStore(taguuid, Bucket); ok {
+		if v, ok := l.SpeedLimiter.Load(taguuid); ok {
 			return v.(*ratelimit.Bucket), false
-		} else {
-			l.SpeedLimiter.Store(taguuid, Bucket)
-			return Bucket, false
 		}
+		Bucket = ratelimit.NewBucketWithQuantum(time.Second, limit, limit) // Byte/s
+		l.SpeedLimiter.Store(taguuid, Bucket)
+		return Bucket, false
 	} else {
 		return nil, false
 	}

@@ -13,7 +13,7 @@ func (c *Client) nodeConfigResponse() (*resty.Response, bool, error) {
 	if c.MachineID > 0 && !time.Now().Before(c.pluginRetryAt) {
 		response, err := c.client.R().SetHeader("Cache-Control", "no-cache").Get("/api/v1/arinode/node/config")
 		if err != nil {
-			return nil, false, fmt.Errorf("plugin configuration request failed")
+			return nil, false, panelRequestError("/api/v1/arinode/node/config", err)
 		}
 		if response == nil {
 			return nil, false, fmt.Errorf("empty plugin configuration response")

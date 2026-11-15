@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +16,12 @@ import (
 
 type Controller struct {
 	pendingClusterReport      *panel.ClusterReport
+	userReportMu              sync.Mutex
+	pendingUserTraffic        map[int]panel.UserTraffic
+	userTrafficReport         *panel.TrafficReport
+	userTrafficLegacyPending  bool
+	userTrafficReceiptSupport bool
+	userTrafficLegacyUntil    time.Time
 	clusterAlive              map[int]map[string]time.Time
 	reportedOnline            map[int]bool
 	server                    vCore.Core
@@ -143,5 +150,5 @@ func (c *Controller) Close() error {
 }
 
 func (c *Controller) buildNodeTag(node *panel.NodeInfo) string {
-	return fmt.Sprintf("[%s]-%s:%d", c.apiClient.APIHost, node.Type, node.Id)
+	return fmt.Sprintf("[%s]-%s:%d", panel.SafePanelAddress(c.apiClient.APIHost), node.Type, node.Id)
 }

@@ -7,6 +7,7 @@ import (
 
 	"encoding/json/v2"
 
+	"github.com/Foxtea267/AriNode/common/counter"
 	"github.com/Foxtea267/AriNode/conf"
 	vCore "github.com/Foxtea267/AriNode/core"
 	"github.com/Foxtea267/AriNode/core/xray/app/dispatcher"
@@ -44,6 +45,7 @@ type Xray struct {
 
 type UserMap struct {
 	uidMap  map[string]int
+	retired map[string]*counter.RetiredUserTraffic
 	mapLock sync.RWMutex
 }
 

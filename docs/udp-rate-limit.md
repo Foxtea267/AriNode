@@ -27,10 +27,10 @@
 | `sing` 普通 UDP 转发 | 本次补齐上下行共享桶；包括 Mieru、VLESS、VMess、SS、Trojan、HY1/HY2、TUIC、AnyTLS 的 packet tracker 路径 |
 | `sing` 内部 `hijack-dns` | 依赖在 packet tracker 之前处理，不经过该限速包装层；不属于普通 UDP outbound 转发 |
 | Xray 普通 `Dispatch` | 现有双向 writer 已应用用户桶，TCP/UDP 都覆盖，本次未修改 |
-| Xray `DispatchLink` | 已知独立问题：下行 writer 应用桶，上行 reader 未应用；同时涉及 TCP/UDP，本次未修改 |
-| 独立 `hysteria2` 内核（`core/hy2`） | 已知独立问题：只使用节点协议带宽，日志准入检查未消费用户桶，不能视为落实用户 `speed_limit`；本次未修改 |
+| Xray `DispatchLink` | 后续已为上行 reader 补用同一桶，下行 writer 继续限速；见 [后续审计](user-revocation-followup.md) |
+| 独立 `hysteria2` 内核（`core/hy2`） | 后续已在 TCP/UDP 转发前消费同一用户桶，等待期间可撤销；见 [后续审计](user-revocation-followup.md#ss2022-与独立-hysteria2) |
 
-`sing` 的 Hysteria2 与独立 `hysteria2` 内核是不同实现。本文不表示所有内核、内部 DNS 操作或所有协议参数组合都已限速。现有 TCP 计数器普通 `Read/Write` 使用 `Store` 的独立累计问题也没有混入此补丁；共享 TCP/UDP 计数回归使用真实的 extended copy 计数路径。
+`sing` 的 Hysteria2 与独立 `hysteria2` 内核是不同实现。本文不表示所有内核、内部 DNS 操作或所有协议参数组合都已限速。最初 UDP 补丁没有混入 TCP `Store` 计数问题；该独立累计缺陷已在后续 [QUIC 撤销与计数修复](quic-revocation-accounting.md) 中修复，流量 collector 也已改用原子 drain。
 
 ## 回归验证
 

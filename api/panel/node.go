@@ -285,7 +285,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		TLSSettingsBack *NativeTLSSettings `json:"tlsSettings"`
 	}
 	if err := json.Unmarshal(body, &native); err != nil {
-		return nil, fmt.Errorf("decode native node settings: %w", err)
+		return nil, fmt.Errorf("decode native node settings: invalid response")
 	}
 	if native.TLSSettingsBack != nil {
 		native.TLSSettings = *native.TLSSettingsBack
@@ -306,7 +306,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		rsp := &VAllssNode{}
 		err = json.Unmarshal(body, rsp)
 		if err != nil {
-			return nil, fmt.Errorf("decode v2ray params error: %s", err)
+			return nil, fmt.Errorf("decode v2ray params: invalid response")
 		}
 		if len(rsp.NetworkSettingsBack) > 0 {
 			rsp.NetworkSettings = rsp.NetworkSettingsBack
@@ -328,7 +328,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		rsp := &ShadowsocksNode{}
 		err = json.Unmarshal(body, rsp)
 		if err != nil {
-			return nil, fmt.Errorf("decode shadowsocks params error: %s", err)
+			return nil, fmt.Errorf("decode shadowsocks params: invalid response")
 		}
 		cm = &rsp.CommonNode
 		node.Shadowsocks = rsp
@@ -337,7 +337,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		rsp := &TrojanNode{}
 		err = json.Unmarshal(body, rsp)
 		if err != nil {
-			return nil, fmt.Errorf("decode trojan params error: %s", err)
+			return nil, fmt.Errorf("decode trojan params: invalid response")
 		}
 		cm = &rsp.CommonNode
 		node.Trojan = rsp
@@ -369,7 +369,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		rsp := &TuicNode{}
 		err = json.Unmarshal(body, rsp)
 		if err != nil {
-			return nil, fmt.Errorf("decode tuic params error: %s", err)
+			return nil, fmt.Errorf("decode tuic params: invalid response")
 		}
 		cm = &rsp.CommonNode
 		node.Tuic = rsp
@@ -378,7 +378,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		rsp := &AnyTlsNode{}
 		err = json.Unmarshal(body, rsp)
 		if err != nil {
-			return nil, fmt.Errorf("decode anytls params error: %s", err)
+			return nil, fmt.Errorf("decode anytls params: invalid response")
 		}
 		cm = &rsp.CommonNode
 		node.AnyTls = rsp
@@ -386,7 +386,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 	case "mieru":
 		rsp := &MieruNode{}
 		if err := json.Unmarshal(body, rsp); err != nil {
-			return nil, fmt.Errorf("decode mieru params: %w", err)
+			return nil, fmt.Errorf("decode mieru params: invalid response")
 		}
 		rsp.Transport = strings.ToLower(rsp.Transport)
 		if rsp.Transport == "" {
@@ -402,7 +402,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		rsp := &HysteriaNode{}
 		err = json.Unmarshal(body, rsp)
 		if err != nil {
-			return nil, fmt.Errorf("decode hysteria params error: %s", err)
+			return nil, fmt.Errorf("decode hysteria params: invalid response")
 		}
 		cm = &rsp.CommonNode
 		node.Hysteria = rsp
@@ -411,7 +411,7 @@ func (c *Client) GetNodeInfo() (node *NodeInfo, err error) {
 		rsp := &Hysteria2Node{}
 		err = json.Unmarshal(body, rsp)
 		if err != nil {
-			return nil, fmt.Errorf("decode hysteria2 params error: %s", err)
+			return nil, fmt.Errorf("decode hysteria2 params: invalid response")
 		}
 		cm = &rsp.CommonNode
 		node.Hysteria2 = rsp

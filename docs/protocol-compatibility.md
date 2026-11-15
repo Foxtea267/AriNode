@@ -38,6 +38,10 @@ XHTTP 面板原始 extra 中的无效 `downloadSettings`/空对象仍会导致�
 
 ## 用户撤销回归
 
+HY1 和 VLESS 的位置编号、旧会话复用及 VLESS 尾部计数已有单独复现与修复：见 [HY1/VLESS 热更新说明](hy1-vless-user-updates.md)。不要把默认协议转发通过等同于所有协议的动态撤销、并发认证和计费都已验收。
+
+HY2/TUIC 另有 `quic_revocation_test.go` 与 `quic_inbound_test.go`：覆盖 UUID 重置、旧 QUIC transport 禁止开新流、活跃 UDP 撤销、空用户名单、健康用户与节点隔离、parent 及旧 SDK 生命周期。详情与原生流量 push 的幂等性限制见 [QUIC 撤销与计数修复](quic-revocation-accounting.md)。
+
 `core/sing/anytls_revocation_test.go` 和 Mieru 真实客户端测试验证：删除用户后关闭已有 TCP/UDP 转发、阻止复用/新建传输重连、保留其他用户连接、支持最后一个用户删除以及重新授权。AnyTLS 的父 TLS 会话持续跟踪到整个会话结束，子流关闭不再提前移除记录；每个新流核对其认证快照，删除再添加同名用户不能恢复旧会话。不同节点/面板共享 UUID 时，流量身份按节点隔离。
 
 `node/authorization_test.go` 验证空列表撤销、内核删除失败后绕过 ETag 重试、配置接口故障不阻止撤销，以及热更新/新增用户失败时不恢复已删除用户。授权轮询间隔上限 30 秒，API 未下发到期时间时仍受面板缓存和请求耗时影响。

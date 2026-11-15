@@ -12,6 +12,7 @@ import (
 )
 
 type serverLogger struct {
+	auth   *V2bX
 	Tag    string
 	logger *zap.Logger
 }
@@ -52,20 +53,20 @@ func (l *serverLogger) Connect(addr net.Addr, uuid string, tx uint64) {
 		l.logger.Error("Get limiter error", zap.String("tag", l.Tag), zap.Error(err))
 		return
 	}
-	if _, r := limiterinfo.CheckLimit(format.UserTag(l.Tag, uuid), extractIPFromAddr(addr), addr.Network() == "tcp", true); r {
-		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, uuid)); ok {
-			userLimit.(*limiter.UserLimitInfo).OverLimit = true
+	if _, r := limiterinfo.CheckLimit(format.UserTag(l.Tag, l.auth.credential(uuid)), extractIPFromAddr(addr), addr.Network() == "tcp", true); r {
+		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, l.auth.credential(uuid))); ok {
+			userLimit.(*limiter.UserLimitInfo).OverLimit.Store(true)
 		}
 	} else {
-		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, uuid)); ok {
-			userLimit.(*limiter.UserLimitInfo).OverLimit = false
+		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, l.auth.credential(uuid))); ok {
+			userLimit.(*limiter.UserLimitInfo).OverLimit.Store(false)
 		}
 	}
-	l.logger.Info("client connected", zap.String("addr", addr.String()), zap.String("uuid", uuid), zap.Uint64("tx", tx))
+	l.logger.Info("client connected", zap.String("addr", addr.String()), zap.Uint64("tx", tx))
 }
 
 func (l *serverLogger) Disconnect(addr net.Addr, uuid string, err error) {
-	l.logger.Info("client disconnected", zap.String("addr", addr.String()), zap.String("uuid", uuid), zap.Error(err))
+	l.logger.Info("client disconnected", zap.String("addr", addr.String()), zap.Error(err))
 }
 
 func (l *serverLogger) TCPRequest(addr net.Addr, uuid, reqAddr string) {
@@ -74,23 +75,23 @@ func (l *serverLogger) TCPRequest(addr net.Addr, uuid, reqAddr string) {
 		l.logger.Error("Get limiter error", zap.String("tag", l.Tag), zap.Error(err))
 		return
 	}
-	if _, r := limiterinfo.CheckLimit(format.UserTag(l.Tag, uuid), extractIPFromAddr(addr), addr.Network() == "tcp", true); r {
-		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, uuid)); ok {
-			userLimit.(*limiter.UserLimitInfo).OverLimit = true
+	if _, r := limiterinfo.CheckLimit(format.UserTag(l.Tag, l.auth.credential(uuid)), extractIPFromAddr(addr), addr.Network() == "tcp", true); r {
+		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, l.auth.credential(uuid))); ok {
+			userLimit.(*limiter.UserLimitInfo).OverLimit.Store(true)
 		}
 	} else {
-		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, uuid)); ok {
-			userLimit.(*limiter.UserLimitInfo).OverLimit = false
+		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, l.auth.credential(uuid))); ok {
+			userLimit.(*limiter.UserLimitInfo).OverLimit.Store(false)
 		}
 	}
-	l.logger.Debug("TCP request", zap.String("addr", addr.String()), zap.String("uuid", uuid), zap.String("reqAddr", reqAddr))
+	l.logger.Debug("TCP request", zap.String("addr", addr.String()), zap.String("reqAddr", reqAddr))
 }
 
 func (l *serverLogger) TCPError(addr net.Addr, uuid, reqAddr string, err error) {
 	if err == nil {
-		l.logger.Debug("TCP closed", zap.String("addr", addr.String()), zap.String("uuid", uuid), zap.String("reqAddr", reqAddr))
+		l.logger.Debug("TCP closed", zap.String("addr", addr.String()), zap.String("reqAddr", reqAddr))
 	} else {
-		l.logger.Debug("TCP error", zap.String("addr", addr.String()), zap.String("uuid", uuid), zap.String("reqAddr", reqAddr), zap.Error(err))
+		l.logger.Debug("TCP error", zap.String("addr", addr.String()), zap.String("reqAddr", reqAddr), zap.Error(err))
 	}
 }
 
@@ -100,23 +101,23 @@ func (l *serverLogger) UDPRequest(addr net.Addr, uuid string, sessionId uint32, 
 		l.logger.Error("Get limiter error", zap.String("tag", l.Tag), zap.Error(err))
 		return
 	}
-	if _, r := limiterinfo.CheckLimit(format.UserTag(l.Tag, uuid), extractIPFromAddr(addr), addr.Network() == "tcp", true); r {
-		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, uuid)); ok {
-			userLimit.(*limiter.UserLimitInfo).OverLimit = true
+	if _, r := limiterinfo.CheckLimit(format.UserTag(l.Tag, l.auth.credential(uuid)), extractIPFromAddr(addr), addr.Network() == "tcp", true); r {
+		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, l.auth.credential(uuid))); ok {
+			userLimit.(*limiter.UserLimitInfo).OverLimit.Store(true)
 		}
 	} else {
-		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, uuid)); ok {
-			userLimit.(*limiter.UserLimitInfo).OverLimit = false
+		if userLimit, ok := limiterinfo.UserLimitInfo.Load(format.UserTag(l.Tag, l.auth.credential(uuid))); ok {
+			userLimit.(*limiter.UserLimitInfo).OverLimit.Store(false)
 		}
 	}
-	l.logger.Debug("UDP request", zap.String("addr", addr.String()), zap.String("uuid", uuid), zap.Uint32("sessionId", sessionId), zap.String("reqAddr", reqAddr))
+	l.logger.Debug("UDP request", zap.String("addr", addr.String()), zap.Uint32("sessionId", sessionId), zap.String("reqAddr", reqAddr))
 }
 
 func (l *serverLogger) UDPError(addr net.Addr, uuid string, sessionId uint32, err error) {
 	if err == nil {
-		l.logger.Debug("UDP closed", zap.String("addr", addr.String()), zap.String("uuid", uuid), zap.Uint32("sessionId", sessionId))
+		l.logger.Debug("UDP closed", zap.String("addr", addr.String()), zap.Uint32("sessionId", sessionId))
 	} else {
-		l.logger.Debug("UDP error", zap.String("addr", addr.String()), zap.String("uuid", uuid), zap.Uint32("sessionId", sessionId), zap.Error(err))
+		l.logger.Debug("UDP error", zap.String("addr", addr.String()), zap.Uint32("sessionId", sessionId), zap.Error(err))
 	}
 }
 

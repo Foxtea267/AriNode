@@ -1,6 +1,7 @@
 package sing
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"net"
@@ -14,11 +15,7 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/protocol/trojan"
-	"github.com/sagernet/sing-box/protocol/vless"
 	"github.com/sagernet/sing-box/transport/v2rayhttp"
-	"github.com/sagernet/sing/common/buf"
-	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
 	STLS "github.com/sagernet/sing/common/tls"
 	sHTTP "github.com/sagernet/sing/protocol/http"
@@ -41,6 +38,18 @@ type httpUpgradeInbound struct {
 	closed        bool
 	connections   map[net.Conn]struct{}
 }
+
+// Keep the hijacked reader intact, but close only its socket. This lets a
+// concurrent revocation interrupt Read without touching the reader's buffer.
+type upgradeBufferedConn struct {
+	net.Conn
+	reader *bufio.Reader
+}
+
+func (c *upgradeBufferedConn) Read(p []byte) (int, error) { return c.reader.Read(p) }
+func (c *upgradeBufferedConn) Upstream() any              { return c.Conn }
+func (*upgradeBufferedConn) ReaderReplaceable() bool      { return false }
+func (*upgradeBufferedConn) WriterReplaceable() bool      { return true }
 
 func newHTTPUpgradeInbound(ctx context.Context, logger log.ContextLogger, inner adapter.Inbound, listen option.ListenOptions, tlsOptions *option.InboundTLSOptions, options option.V2RayHTTPUpgradeOptions) (adapter.Inbound, error) {
 	h := &httpUpgradeInbound{Inbound: inner, ctx: ctx, logger: logger, listenOptions: listen, options: options, connections: map[net.Conn]struct{}{}}
@@ -133,13 +142,7 @@ func (h *httpUpgradeInbound) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if n := buffered.Reader.Buffered(); n > 0 {
-		cached := buf.NewSize(n)
-		if _, err := cached.ReadFullFrom(buffered.Reader, n); err != nil {
-			cached.Release()
-			_ = conn.Close()
-			return
-		}
-		conn = bufio.NewCachedConn(conn, cached)
+		conn = &upgradeBufferedConn{Conn: conn, reader: buffered.Reader}
 	}
 	h.mu.Lock()
 	if h.closed {
@@ -158,12 +161,12 @@ func (h *httpUpgradeInbound) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 func newVLESSInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, o option.VLESSInboundOptions) (adapter.Inbound, error) {
 	if o.Transport == nil || o.Transport.Type != "httpupgrade" {
-		return vless.NewInbound(ctx, router, logger, tag, o)
+		return newStableVLESSInbound(ctx, router, logger, tag, o)
 	}
 	transport, tlsOptions := o.Transport, o.TLS
 	// Keep native transport/TLS metadata (including ALPN fallback); its HTTP
 	// listener is never started. The frontend owns the single listening socket.
-	inner, err := vless.NewInbound(ctx, router, logger, tag, o)
+	inner, err := newStableVLESSInbound(ctx, router, logger, tag, o)
 	if err != nil {
 		return nil, err
 	}
@@ -171,10 +174,10 @@ func newVLESSInbound(ctx context.Context, router adapter.Router, logger log.Cont
 }
 func newTrojanInbound(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, o option.TrojanInboundOptions) (adapter.Inbound, error) {
 	if o.Transport == nil || o.Transport.Type != "httpupgrade" {
-		return trojan.NewInbound(ctx, router, logger, tag, o)
+		return newStableTrojanInbound(ctx, router, logger, tag, o)
 	}
 	transport, tlsOptions := o.Transport, o.TLS
-	inner, err := trojan.NewInbound(ctx, router, logger, tag, o)
+	inner, err := newStableTrojanInbound(ctx, router, logger, tag, o)
 	if err != nil {
 		return nil, err
 	}

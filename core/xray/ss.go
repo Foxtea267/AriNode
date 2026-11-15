@@ -1,7 +1,6 @@
 package xray
 
 import (
-	"encoding/base64"
 	"strings"
 
 	"github.com/Foxtea267/AriNode/api/panel"
@@ -12,15 +11,23 @@ import (
 	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
 )
 
-func buildSSUsers(tag string, userInfo []panel.UserInfo, cypher string, serverKey string) (users []*protocol.User) {
-	users = make([]*protocol.User, len(userInfo))
+func buildSSUsers(tag string, userInfo []panel.UserInfo, cypher string, serverKey string) ([]*protocol.User, error) {
+	users := make([]*protocol.User, len(userInfo))
 	for i := range userInfo {
-		users[i] = buildSSUser(tag, &userInfo[i], cypher, serverKey)
+		user, err := buildSSUser(tag, &userInfo[i], cypher, serverKey)
+		if err != nil {
+			return nil, err
+		}
+		users[i] = user
 	}
-	return users
+	return users, nil
 }
 
-func buildSSUser(tag string, userInfo *panel.UserInfo, cypher string, serverKey string) (user *protocol.User) {
+func buildSSUser(tag string, userInfo *panel.UserInfo, cypher string, serverKey string) (*protocol.User, error) {
+	password, err := format.ShadowsocksUserPassword(cypher, userInfo.Uuid)
+	if err != nil {
+		return nil, err
+	}
 	if serverKey == "" {
 		ssAccount := &shadowsocks.Account{
 			Password:   userInfo.Uuid,
@@ -30,25 +37,16 @@ func buildSSUser(tag string, userInfo *panel.UserInfo, cypher string, serverKey 
 			Level:   0,
 			Email:   format.UserTag(tag, userInfo.Uuid),
 			Account: serial.ToTypedMessage(ssAccount),
-		}
+		}, nil
 	} else {
-		var keyLength int
-		switch cypher {
-		case "2022-blake3-aes-128-gcm":
-			keyLength = 16
-		case "2022-blake3-aes-256-gcm":
-			keyLength = 32
-		case "2022-blake3-chacha20-poly1305":
-			keyLength = 32
-		}
 		ssAccount := &shadowsocks_2022.Account{
-			Key: base64.StdEncoding.EncodeToString([]byte(userInfo.Uuid[:keyLength])),
+			Key: password,
 		}
 		return &protocol.User{
 			Level:   0,
 			Email:   format.UserTag(tag, userInfo.Uuid),
 			Account: serial.ToTypedMessage(ssAccount),
-		}
+		}, nil
 	}
 }
 

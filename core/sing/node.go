@@ -544,6 +544,7 @@ func (b *Sing) DelNode(tag string) error {
 	}
 	b.users.mapLock.Lock()
 	delete(b.users.uidMap, tag)
+	delete(b.users.retiredTraffic, tag)
 	delete(b.nodeReportMinTrafficBytes, tag)
 	b.users.mapLock.Unlock()
 	b.hookServer.counter.Delete(tag)

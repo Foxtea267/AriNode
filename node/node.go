@@ -172,7 +172,7 @@ func (n *Node) tryPendingLocked() {
 		if controller.machinePrimary.Load() {
 			primaries[key] = true
 		}
-		log.WithFields(log.Fields{"panel": c.ApiConfig.APIHost, "node_id": c.ApiConfig.NodeID, "core": entry.status.Core, "port": entry.status.Port}).Info("Node started")
+		log.WithFields(log.Fields{"panel": panel.SafePanelAddress(c.ApiConfig.APIHost), "node_id": c.ApiConfig.NodeID, "core": entry.status.Core, "port": entry.status.Port}).Info("Node started")
 	}
 	n.publishLocked()
 }
@@ -198,7 +198,7 @@ func closeController(c *Controller) (err error) {
 func (n *Node) failLocked(entry *managedNode, err error) {
 	entry.status.State = "retrying"
 	entry.status.Error = "node startup failed; see service logs"
-	log.WithError(err).WithFields(log.Fields{"panel": entry.status.Panel, "node_id": entry.status.NodeID}).Warn("Node unavailable; other nodes remain running")
+	log.WithError(err).WithFields(log.Fields{"panel": panel.SafePanelAddress(entry.status.Panel), "node_id": entry.status.NodeID}).Warn("Node unavailable; other nodes remain running")
 }
 
 func (n *Node) publishLocked() {

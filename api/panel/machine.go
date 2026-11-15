@@ -17,7 +17,10 @@ func (c *Client) GetMachineNodes() ([]MachineNode, error) {
 	}
 	r, err := c.client.R().SetHeader("Accept", "application/json").SetBody(map[string]any{"token": c.Token, "machine_id": c.MachineID}).Post("/api/v2/server/machine/nodes")
 	if err != nil {
-		return nil, fmt.Errorf("machine discovery request failed")
+		return nil, panelRequestError("/api/v2/server/machine/nodes", err)
+	}
+	if r == nil {
+		return nil, fmt.Errorf("machine discovery failed: no response")
 	}
 	if r.StatusCode() != 200 {
 		return nil, fmt.Errorf("machine discovery HTTP %d", r.StatusCode())

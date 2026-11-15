@@ -22,6 +22,8 @@ func (w *Writer) Close() error {
 	return common.Close(w.writer)
 }
 
+func (w *Writer) Interrupt() { common.Interrupt(w.writer) }
+
 func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	w.limiter.Wait(int64(mb.Len()))
 	return w.writer.WriteMultiBuffer(mb)

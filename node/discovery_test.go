@@ -48,7 +48,9 @@ func TestMachineDiscoveryPreservesHealthyNodesAcrossUpdatesAndFailures(t *testin
 		t.Fatal(err)
 	}
 	defer n.Close()
+	n.mu.Lock()
 	healthy := n.entries[0].controller
+	n.mu.Unlock()
 	state.Store(1)
 	deadline := time.Now().Add(2 * time.Second)
 	for len(n.Snapshot()) != 2 && time.Now().Before(deadline) {

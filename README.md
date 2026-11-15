@@ -1,8 +1,16 @@
 # AriNode
 
+## HY1 and VLESS live user updates
+
+The default `sing` backend now uses stable authentication generations for Hysteria v1 and VLESS, avoiding array-position changes after deleting users. VLESS revocation closes that user's parent and TCP/UDP child sessions, preserves healthy users and other nodes, and retains final traffic under the original panel UID. Follow-up fixes also cover VMess AEAD, Trojan, classic Shadowsocks, Xray dispatch registration, and standalone Hysteria2 authentication. [Scope and remaining gaps](docs/user-revocation-followup.md). Native traffic push still cannot guarantee exactly-once billing after a lost acknowledgement. See [reproduction and test scope](docs/hy1-vless-user-updates.md).
+
+## HY2/TUIC revocation and traffic accounting
+
+The default `sing` core now rejects old QUIC authentication after UUID rotation/re-add, closes revoked HY2 UDP forwarding, and avoids TUIC's active-packet connection type panic. Immutable authentication generations preserve healthy sessions. TCP counters accumulate bytes, collectors drain atomically, and failed native traffic reports retain an in-memory retry batch. Native push has no idempotency key, so an accepted report with a lost response can still be billed twice; panel outages also delay expiration. The pinned sing-quic packet cleanup callback also has a pooled session-ID race risk that could not be dynamically race-checked here. See [reproduction, scope and regression tests](docs/quic-revocation-accounting.md).
+
 ## UDP user rate limits
 
-The default `sing` core now applies user `speed_limit` to normal UDP forwarding. TCP, UDP, both directions and concurrent sessions for the same node/user share the existing bucket, preserving Mbps units, device limits, billing and revocation. No extra outbound or node configuration is needed. Regression tests cover real Mieru TCP/UDP transports and VLESS, SS, HY2, TUIC and AnyTLS UDP throttling. The standalone `hysteria2` core and Xray's `DispatchLink` have separate existing gaps; see [implementation, tests and scope](docs/udp-rate-limit.md).
+The default `sing` core now applies user `speed_limit` to normal UDP forwarding. TCP, UDP, both directions and concurrent sessions for the same node/user share the existing bucket, preserving Mbps units, device limits, billing and revocation. No extra outbound or node configuration is needed. Regression tests cover real Mieru TCP/UDP transports and VLESS, SS, HY2, TUIC and AnyTLS UDP throttling. Xray now applies the shared bucket in both dispatcher paths. The standalone `hysteria2` core still lacks per-user bandwidth enforcement; see [implementation, tests and scope](docs/udp-rate-limit.md).
 
 ## Dynamic SOCKS5 Outbound Manager (DSOM)
 
@@ -102,7 +110,7 @@ Import automatically queries Xboard for node types absent from the YAML and disc
 
 ## Xboard plugin
 
-Plugin **0.9.2** includes a server management page at `https://YOUR_PANEL/arinode/admin`, with a compact monochrome table, node directory, edit/deployment dialogs and light/dark themes. Sign in to the XBoard admin on the same origin, click **添加服务器**, enter its name, optionally select existing nodes, then save. Copy the deployment command onto the target Linux server. Its registration code expires after 30 minutes and lets AriNode fetch machine credentials, bindings and node configuration. The default core is sing-box. Compatible XBoard admin builds show native **Servers / Available nodes** plugin menus. [Page and deployment guide](docs/xboard-plugin.md).
+Plugin **0.9.3** includes a server management page at `https://YOUR_PANEL/arinode/admin`, with a compact monochrome table, node directory, edit/deployment dialogs and light/dark themes. Sign in to the XBoard admin on the same origin, click **添加服务器**, enter its name, optionally select existing nodes, then save. Copy the deployment command onto the target Linux server. Its registration code expires after 30 minutes and lets AriNode fetch machine credentials, bindings and node configuration. The default core is sing-box. Compatible XBoard admin builds show native **Servers / Available nodes** plugin menus. [Page and deployment guide](docs/xboard-plugin.md).
 
 The native **服务器与部署命令** table uses a 290 px command column with a **复制命令** button on each row and a 140 px deployment hint column. The button copies the complete command. Expired registration codes prompt a list refresh, and browsers that deny automatic copying show the selected command for Ctrl+C / ⌘C. XBoard admin HTML served by Laravel at its configured `secure_path` loads this enhancement automatically. Separately hosted static admin pages can load `/arinode/native-table.css` and deferred `/arinode/native-table.js` through their own origin, or use `/arinode/admin`. Custom CSP must permit these same-origin scripts and styles. [Static frontend integration](docs/xboard-plugin.md#原生后台表格中的部署命令).
 
