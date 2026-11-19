@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -27,27 +28,63 @@ func (c *PanelConfig) UnmarshalJSON(data []byte) error {
 	type plain PanelConfig
 	var raw struct {
 		plain
-		Mode string `json:"mode"`
+		Mode     string          `json:"mode"`
+		HTTPPort json.RawMessage `json:"http_port"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return fmt.Errorf("invalid panel certificate configuration")
 	}
-	*c = PanelConfig(raw.plain)
-	if c.CertMode == "" {
-		c.CertMode = raw.Mode
+	port, err := panelHTTPPort(raw.HTTPPort)
+	if err != nil {
+		return err
 	}
-	c.CertMode = strings.ToLower(strings.TrimSpace(c.CertMode))
-	c.Domain = strings.TrimSpace(c.Domain)
-	c.CertContent = NormalizePEM(c.CertContent)
-	c.KeyContent = NormalizePEM(c.KeyContent)
-	if c.CertMode == "content" && c.CertContent != "" && c.KeyContent != "" {
+	next := PanelConfig(raw.plain)
+	next.HTTPPort = port
+	if next.CertMode == "" {
+		next.CertMode = raw.Mode
+	}
+	next.CertMode = strings.ToLower(strings.TrimSpace(next.CertMode))
+	next.Domain = strings.TrimSpace(next.Domain)
+	next.CertContent = NormalizePEM(next.CertContent)
+	next.KeyContent = NormalizePEM(next.KeyContent)
+	if next.CertMode == "content" && next.CertContent != "" && next.KeyContent != "" {
 		// Different PEM wrapping or PKCS#1/SEC1 vs PKCS#8 is not key rotation.
 		// Preserve invalid material for the controller's safe error/retry path.
-		if certificate, key, err := CanonicalPair(c.CertContent, c.KeyContent); err == nil {
-			c.CertContent, c.KeyContent = certificate, key
+		if certificate, key, err := CanonicalPair(next.CertContent, next.KeyContent); err == nil {
+			next.CertContent, next.KeyContent = certificate, key
 		}
 	}
+	*c = next
 	return nil
+}
+
+func panelHTTPPort(raw json.RawMessage) (int, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0, nil
+	}
+	// PHP form values can reach the node as strings or JSON numbers.
+	// Normalize both into the existing integer runtime field. Zero/blank
+	// retains the ACME provider's default port; never echo invalid material.
+	value := string(raw)
+	if raw[0] == '"' {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return 0, fmt.Errorf("invalid panel certificate http_port")
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return 0, nil
+		}
+	}
+	for i := range value {
+		if value[i] < '0' || value[i] > '9' {
+			return 0, fmt.Errorf("panel certificate http_port must be an integer from 0 to 65535")
+		}
+	}
+	port, err := strconv.ParseUint(value, 10, 16)
+	if err != nil {
+		return 0, fmt.Errorf("panel certificate http_port must be an integer from 0 to 65535")
+	}
+	return int(port), nil
 }
 
 func CanonicalPair(certificate, key string) (string, string, error) {
